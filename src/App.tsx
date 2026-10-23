@@ -2098,37 +2098,311 @@ function AdminDiscounts() {
 
 /* Remaining admin sections - simplified but functional */
 function AdminGrowth() {
-  const { campaigns, setCampaigns, darkMode, log } = useAdmin();
+  const { campaigns, setCampaigns, automations, setAutomations, loyalty, setLoyalty, darkMode, log, orders } = useAdmin();
+  const { discountCodes, setDiscountCodes } = useShop();
+  const [tab, setTab] = useState<'campaigns' | 'codes' | 'automation' | 'loyalty' | 'ab'>('campaigns');
+  const [showCodeForm, setShowCodeForm] = useState(false);
+  const [newCode, setNewCode] = useState({ code: '', type: 'percent', value: 10, maxUses: 100, expiresAt: '' });
+
+  const totalCampaignUses = campaigns.reduce((s: number, c: any) => s + c.uses, 0);
+  const activeCampaigns = campaigns.filter((c: any) => c.active).length;
+  const totalAutomationSent = automations.reduce((s: number, a: any) => s + a.sent, 0);
+
   return (
     <div className="space-y-4">
-      <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'}`}>کمپین‌های بازاریابی</h3>
-      <div className="space-y-2">{campaigns.map((c: any) => (
-        <div key={c.id} className={`rounded-xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-4 flex items-center justify-between`}>
-          <div><p className="text-[12px] font-bold">{c.name}</p><p className="text-[10px] text-cream-500">نوع: {c.type} | استفاده: {faNum(c.uses)}</p></div>
-          <button onClick={() => { setCampaigns(campaigns.map((x: any) => x.id === c.id ? { ...x, active: !x.active } : x)); log(`تغییر وضعیت کمپین ${c.name}`, c.id); }} className={`px-3 py-1 rounded-lg text-[10px] font-bold ${c.active ? 'bg-emerald-100 text-emerald-700' : 'bg-cream-100 text-cream-500'}`}>{c.active ? 'فعال' : 'غیرفعال'}</button>
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[
+          { l: 'کمپین‌های فعال', v: faNum(activeCampaigns), c: 'bg-emerald-50 text-emerald-700', icon: <IconRocket className="w-5 h-5" /> },
+          { l: 'کل استفاده کمپین', v: faNum(totalCampaignUses), c: 'bg-blue-50 text-blue-700', icon: <IconTrending className="w-5 h-5" /> },
+          { l: 'کدهای تخفیف', v: faNum(discountCodes.length), c: 'bg-purple-50 text-purple-700', icon: <IconTag className="w-5 h-5" /> },
+          { l: 'پیام‌های ارسالی', v: faNum(totalAutomationSent), c: 'bg-amber-50 text-amber-700', icon: <IconSend className="w-5 h-5" /> },
+        ].map((k, i) => (
+          <div key={i} className={`rounded-xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-4`}>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[10px] text-cream-500">{k.l}</p>
+              <div className={k.c + ' p-1.5 rounded-lg'}>{k.icon}</div>
+            </div>
+            <p className={`text-lg font-extrabold tnum ${darkMode ? 'text-white' : 'text-brand-900'}`}>{k.v}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Tabs */}
+      <div className="flex flex-wrap gap-2 border-b border-cream-300">
+        {[{ k: 'campaigns', l: 'کمپین‌ها' }, { k: 'codes', l: 'کدهای تخفیف' }, { k: 'automation', l: 'اتوماسیون' }, { k: 'loyalty', l: 'باشگاه وفاداری' }, { k: 'ab', l: 'آزمایش A/B' }].map(t => (
+          <button key={t.k} onClick={() => setTab(t.k as any)} className={`pb-2 px-3 text-[12px] font-bold border-b-2 transition-colors ${tab === t.k ? 'border-brand-900 text-brand-900' : 'border-transparent text-cream-500 hover:text-brand-700'}`}>{t.l}</button>
+        ))}
+      </div>
+
+      {/* Campaigns Tab */}
+      {tab === 'campaigns' && (
+        <div className="space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {campaigns.map((c: any) => (
+              <div key={c.id} className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5 hover:shadow-lg transition-all`}>
+                <div className="flex items-center justify-between mb-3">
+                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${c.type === 'tiered' ? 'bg-purple-100 text-purple-700' : c.type === 'bogo' ? 'bg-pink-100 text-pink-700' : 'bg-blue-100 text-blue-700'}`}>
+                    {c.type === 'tiered' ? 'پلکانی' : c.type === 'bogo' ? 'یکی بخر یکی ببر' : 'ارسال رایگان'}
+                  </span>
+                  <button onClick={() => { setCampaigns(campaigns.map((x: any) => x.id === c.id ? { ...x, active: !x.active } : x)); log(`تغییر وضعیت کمپین ${c.name}`, c.id); }} className={`w-10 h-5 rounded-full relative transition-colors ${c.active ? 'bg-emerald-500' : 'bg-cream-300'}`}>
+                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${c.active ? 'right-0.5' : 'right-5'}`}></span>
+                  </button>
+                </div>
+                <h4 className={`text-[13px] font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-2`}>{c.name}</h4>
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-cream-500">استفاده: <span className="tnum font-bold text-brand-900">{faNum(c.uses)}</span></span>
+                  {c.config?.tiers && <span className="text-cream-500">تا {faNum(c.config.tiers[c.config.tiers.length - 1]?.discount || 0)}٪ تخفیف</span>}
+                </div>
+                <div className="mt-3 h-1.5 bg-cream-200 rounded-full overflow-hidden">
+                  <div className="h-full bg-brand-900 rounded-full" style={{ width: `${Math.min(100, c.uses * 2)}%` }}></div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
-      ))}</div>
+      )}
+
+      {/* Discount Codes Tab */}
+      {tab === 'codes' && (
+        <div className="space-y-3">
+          <button onClick={() => setShowCodeForm(true)} className="flex items-center gap-2 bg-brand-900 text-white px-4 py-2.5 rounded-xl text-[12px] font-bold shadow-lg shadow-brand-900/25">
+            <IconPlus className="w-4 h-4" /> ایجاد کد تخفیف جدید
+          </button>
+          <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} overflow-hidden`}>
+            <table className="w-full text-[12px]">
+              <thead><tr className={`border-y ${darkMode ? 'border-white/10 bg-white/5' : 'border-cream-300 bg-cream-100/70'}`}>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">کد</th>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">نوع</th>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">مقدار</th>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">استفاده / سقف</th>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">انقضا</th>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">وضعیت</th>
+              </tr></thead>
+              <tbody>{discountCodes.map((c: any) => (
+                <tr key={c.id} className={`border-b ${darkMode ? 'border-white/5 hover:bg-white/5' : 'border-cream-100 hover:bg-brand-50/40'}`}>
+                  <td className="py-2.5 px-3 font-bold font-mono text-brand-700">{c.code}</td>
+                  <td className="py-2.5 px-3">{c.type === 'percent' ? 'درصدی' : 'مبلغ ثابت'}</td>
+                  <td className="py-2.5 px-3 tnum">{c.type === 'percent' ? `${faNum(c.value)}٪` : formatPrice(c.value)}</td>
+                  <td className="py-2.5 px-3 tnum">{faNum(c.usedCount)} / {faNum(c.maxUses)}</td>
+                  <td className="py-2.5 px-3 text-[11px] text-cream-500">{c.expiresAt}</td>
+                  <td className="py-2.5 px-3">
+                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${c.active ? 'bg-emerald-100 text-emerald-700' : 'bg-cream-100 text-cream-500'}`}>{c.active ? 'فعال' : 'غیرفعال'}</span>
+                  </td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+          {showCodeForm && (
+            <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setShowCodeForm(false)}>
+              <div className={`w-full max-w-sm rounded-2xl ${darkMode ? 'bg-[#151b26]' : 'bg-white'} p-6 animate-rise`} onClick={e => e.stopPropagation()}>
+                <h3 className="font-bold mb-4">ایجاد کد تخفیف</h3>
+                <div className="space-y-3">
+                  <input value={newCode.code} onChange={e => setNewCode({ ...newCode, code: e.target.value.toUpperCase() })} placeholder="کد تخفیف" className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" />
+                  <select value={newCode.type} onChange={e => setNewCode({ ...newCode, type: e.target.value })} className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none">
+                    <option value="percent">درصدی</option><option value="fixed">مبلغ ثابت</option>
+                  </select>
+                  <input type="number" value={newCode.value} onChange={e => setNewCode({ ...newCode, value: +e.target.value })} placeholder="مقدار" className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" />
+                  <input type="number" value={newCode.maxUses} onChange={e => setNewCode({ ...newCode, maxUses: +e.target.value })} placeholder="سقف استفاده" className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" />
+                  <input type="date" value={newCode.expiresAt} onChange={e => setNewCode({ ...newCode, expiresAt: e.target.value })} className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" />
+                </div>
+                <button onClick={() => { setDiscountCodes([...discountCodes, { ...newCode, id: `dc-${Date.now()}`, usedCount: 0, active: true }]); setShowCodeForm(false); setNewCode({ code: '', type: 'percent', value: 10, maxUses: 100, expiresAt: '' }); log('ایجاد کد تخفیف', newCode.code); }} className="w-full mt-4 bg-brand-900 text-white py-2.5 rounded-xl font-bold text-[12px]">ذخیره</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Automation Tab */}
+      {tab === 'automation' && (
+        <div className="space-y-3">
+          {automations.map((a: any) => (
+            <div key={a.id} className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5 hover:shadow-md transition-all`}>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${a.channel === 'sms' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
+                    <IconSend className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className={`text-[13px] font-bold ${darkMode ? 'text-white' : 'text-brand-900'}`}>{a.name}</h4>
+                    <p className="text-[10px] text-cream-500">رویداد: {a.event} | کانال: {a.channel}</p>
+                  </div>
+                </div>
+                <button onClick={() => { setAutomations(automations.map((x: any) => x.id === a.id ? { ...x, active: !x.active } : x)); }} className={`w-10 h-5 rounded-full relative transition-colors ${a.active ? 'bg-emerald-500' : 'bg-cream-300'}`}>
+                  <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${a.active ? 'right-0.5' : 'right-5'}`}></span>
+                </button>
+              </div>
+              <div className={`rounded-lg ${darkMode ? 'bg-[#1a212c]' : 'bg-cream-50'} p-3 text-[11px] text-brand-700 mb-2`}>{a.template}</div>
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-cream-500">ارسال شده: <span className="tnum font-bold text-brand-900">{faNum(a.sent)}</span></span>
+                <button onClick={() => { setAutomations(automations.map((x: any) => x.id === a.id ? { ...x, sent: x.sent + 1 } : x)); }} className="text-brand-600 font-bold text-[10px] hover:text-brand-900">تست ارسال</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Loyalty Tab */}
+      {tab === 'loyalty' && (
+        <div className="space-y-4">
+          <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
+            <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-4`}>تنظیمات امتیازدهی</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-[11px] font-bold text-cream-500 mb-1 block">امتیاز به ازای هر ۱۰۰۰ تومان</label>
+                <input type="number" value={loyalty.pointsPerThousand} onChange={e => setLoyalty({ ...loyalty, pointsPerThousand: +e.target.value })} className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" />
+              </div>
+              <div>
+                <label className="text-[11px] font-bold text-cream-500 mb-1 block">ارزش هر امتیاز (تومان)</label>
+                <input type="number" value={loyalty.pointValue} onChange={e => setLoyalty({ ...loyalty, pointValue: +e.target.value })} className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" />
+              </div>
+            </div>
+          </div>
+          <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
+            <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-4`}>برترین اعضای باشگاه</h3>
+            <div className="space-y-3">
+              {loyalty.members.map((m: any, i: number) => (
+                <div key={m.id} className={`flex items-center justify-between p-3 rounded-xl ${darkMode ? 'bg-[#1a212c]' : 'bg-cream-50'}`}>
+                  <div className="flex items-center gap-3">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold ${i === 0 ? 'bg-amber-500' : i === 1 ? 'bg-gray-400' : 'bg-amber-700'}`}>{faNum(i + 1)}</div>
+                    <div>
+                      <p className="text-[12px] font-bold">{m.name}</p>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${m.tier === 'platinum' ? 'bg-purple-100 text-purple-700' : m.tier === 'gold' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-700'}`}>{m.tier === 'platinum' ? 'پلاتینیوم' : m.tier === 'gold' ? 'طلایی' : 'نقره‌ای'}</span>
+                    </div>
+                  </div>
+                  <span className="tnum text-[13px] font-extrabold text-brand-900">{faNum(m.points)} امتیاز</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* A/B Test Tab */}
+      {tab === 'ab' && (
+        <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
+          <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-4`}>مقایسه سناریوهای تخفیف</h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div className={`rounded-xl border-2 border-dashed ${darkMode ? 'border-white/20' : 'border-brand-200'} p-4`}>
+              <h4 className="text-[12px] font-bold text-brand-900 mb-3">سناریو A: تخفیف ۱۰٪</h4>
+              <div className="space-y-2 text-[11px]">
+                <div className="flex justify-between"><span className="text-cream-500">نرخ تبدیل:</span><span className="tnum font-bold">۴.۲٪</span></div>
+                <div className="flex justify-between"><span className="text-cream-500">بازدید:</span><span className="tnum font-bold">{faNum(1250)}</span></div>
+                <div className="flex justify-between"><span className="text-cream-500">خرید:</span><span className="tnum font-bold">{faNum(52)}</span></div>
+                <div className="flex justify-between"><span className="text-cream-500">درآمد:</span><span className="tnum font-bold">{formatPrice(3200000)}</span></div>
+              </div>
+            </div>
+            <div className={`rounded-xl border-2 border-dashed ${darkMode ? 'border-white/20' : 'border-emerald-200'} p-4 bg-emerald-50/30`}>
+              <h4 className="text-[12px] font-bold text-brand-900 mb-3">سناریو B: تخفیف ۱۵٪</h4>
+              <div className="space-y-2 text-[11px]">
+                <div className="flex justify-between"><span className="text-cream-500">نرخ تبدیل:</span><span className="tnum font-bold text-emerald-700">۵.۸٪</span></div>
+                <div className="flex justify-between"><span className="text-cream-500">بازدید:</span><span className="tnum font-bold">{faNum(1250)}</span></div>
+                <div className="flex justify-between"><span className="text-cream-500">خرید:</span><span className="tnum font-bold text-emerald-700">{faNum(72)}</span></div>
+                <div className="flex justify-between"><span className="text-cream-500">درآمد:</span><span className="tnum font-bold text-emerald-700">{formatPrice(3850000)}</span></div>
+              </div>
+              <div className="mt-3 pt-3 border-t border-emerald-200">
+                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-1 rounded-full">برنده: سناریو B</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 function AdminReturns() {
   const { rmas, setRmas, darkMode, log } = useAdmin();
+  const [filter, setFilter] = useState('all');
   const statusFlow = ['requested', 'approved', 'quality_check', 'returned', 'refunded'];
   const statusLabels: Record<string, string> = { requested: 'درخواست', approved: 'تأیید شده', quality_check: 'بررسی کیفیت', returned: 'بازگشت به انبار', refunded: 'بازگشت وجه', rejected: 'رد شده' };
+  const statusColors: Record<string, string> = { requested: 'bg-amber-100 text-amber-700', approved: 'bg-blue-100 text-blue-700', quality_check: 'bg-purple-100 text-purple-700', returned: 'bg-indigo-100 text-indigo-700', refunded: 'bg-emerald-100 text-emerald-700', rejected: 'bg-coral-100 text-coral-700' };
+
+  const filtered = rmas.filter((r: any) => filter === 'all' || r.status === filter);
+  const reasonStats = rmas.reduce((acc: Record<string, number>, r: any) => { acc[r.reason] = (acc[r.reason] || 0) + 1; return acc; }, {});
+
   return (
-    <div className="space-y-3">{rmas.map((r: any) => (
-      <div key={r.id} className={`rounded-xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-4`}>
-        <div className="flex items-center justify-between mb-2"><span className="text-[12px] font-bold">{r.productName}</span><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.status === 'refunded' ? 'bg-emerald-100 text-emerald-700' : r.status === 'rejected' ? 'bg-coral-100 text-coral-700' : 'bg-amber-100 text-amber-700'}`}>{statusLabels[r.status] || r.status}</span></div>
-        <p className="text-[11px] text-cream-500">مشتری: {r.customer} | دلیل: {r.reason}</p>
-        {r.status !== 'refunded' && r.status !== 'rejected' && (
-          <div className="flex gap-1 mt-2">
-            <button onClick={() => { const idx = statusFlow.indexOf(r.status); const next = idx < statusFlow.length - 1 ? statusFlow[idx + 1] : 'refunded'; setRmas(rmas.map((x: any) => x.id === r.id ? { ...x, status: next } : x)); log(`پیشبرد مرجوعی ${r.id}`, r.id); }} className="px-2 py-1 rounded-lg bg-brand-900 text-white text-[10px] font-bold">مرحله بعد</button>
-            <button onClick={() => { setRmas(rmas.map((x: any) => x.id === r.id ? { ...x, status: 'rejected' } : x)); }} className="px-2 py-1 rounded-lg bg-coral-100 text-coral-700 text-[10px] font-bold">رد</button>
+    <div className="space-y-4">
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[
+          { l: 'کل مرجوعی‌ها', v: faNum(rmas.length), c: 'bg-blue-50 text-blue-700' },
+          { l: 'در انتظار بررسی', v: faNum(rmas.filter((r: any) => r.status === 'requested').length), c: 'bg-amber-50 text-amber-700' },
+          { l: 'تکمیل شده', v: faNum(rmas.filter((r: any) => r.status === 'refunded').length), c: 'bg-emerald-50 text-emerald-700' },
+          { l: 'رد شده', v: faNum(rmas.filter((r: any) => r.status === 'rejected').length), c: 'bg-coral-50 text-coral-700' },
+        ].map((k, i) => (
+          <div key={i} className={`rounded-xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-4`}>
+            <p className="text-[10px] text-cream-500">{k.l}</p>
+            <p className={`text-lg font-extrabold tnum ${darkMode ? 'text-white' : 'text-brand-900'}`}>{k.v}</p>
           </div>
-        )}
+        ))}
       </div>
-    ))}</div>
+
+      {/* Reason Analysis */}
+      <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
+        <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-3`}>تحلیل دلایل بازگشت</h3>
+        <div className="space-y-2">
+          {Object.entries(reasonStats).map(([reason, count]) => (
+            <div key={reason} className="flex items-center gap-3">
+              <span className="text-[11px] font-bold text-brand-700 w-32">{reason}</span>
+              <div className="flex-1 h-3 bg-cream-200 rounded-full overflow-hidden">
+                <div className="h-full bg-coral-500 rounded-full" style={{ width: `${(count / rmas.length) * 100}%` }}></div>
+              </div>
+              <span className="tnum text-[11px] font-bold text-cream-500 w-8">{faNum(count)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Filter */}
+      <div className="flex flex-wrap gap-2">
+        {['all', 'requested', 'approved', 'quality_check', 'returned', 'refunded', 'rejected'].map(s => (
+          <button key={s} onClick={() => setFilter(s)} className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition-colors ${filter === s ? 'bg-brand-900 text-white' : darkMode ? 'bg-white/5 text-brand-300' : 'bg-cream-100 text-brand-700'}`}>
+            {s === 'all' ? 'همه' : statusLabels[s] || s}
+          </button>
+        ))}
+      </div>
+
+      {/* RMA List */}
+      <div className="space-y-3">
+        {filtered.map((r: any) => (
+          <div key={r.id} className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5 hover:shadow-md transition-all`}>
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <h4 className={`text-[13px] font-bold ${darkMode ? 'text-white' : 'text-brand-900'}`}>{r.productName}</h4>
+                <p className="text-[11px] text-cream-500 mt-1">مشتری: {r.customer} | تاریخ: {dayLabel(new Date(r.date))}</p>
+              </div>
+              <span className={`px-3 py-1 rounded-full text-[10px] font-bold ${statusColors[r.status]}`}>{statusLabels[r.status] || r.status}</span>
+            </div>
+            
+            {/* Workflow Progress */}
+            <div className="flex items-center gap-1 mb-3">
+              {statusFlow.map((step, i) => {
+                const currentIdx = statusFlow.indexOf(r.status);
+                const isActive = i <= currentIdx && r.status !== 'rejected';
+                return (
+                  <React.Fragment key={step}>
+                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold ${isActive ? 'bg-brand-900 text-white' : 'bg-cream-200 text-cream-500'}`}>{faNum(i + 1)}</div>
+                    {i < statusFlow.length - 1 && <div className={`flex-1 h-0.5 ${isActive && i < currentIdx ? 'bg-brand-900' : 'bg-cream-200'}`}></div>}
+                  </React.Fragment>
+                );
+              })}
+            </div>
+
+            <div className={`rounded-lg ${darkMode ? 'bg-[#1a212c]' : 'bg-cream-50'} p-3 mb-3`}>
+              <p className="text-[11px]"><span className="text-cream-500">دلیل: </span><span className="font-bold">{r.reason}</span></p>
+            </div>
+
+            {r.status !== 'refunded' && r.status !== 'rejected' && (
+              <div className="flex gap-2">
+                <button onClick={() => { const idx = statusFlow.indexOf(r.status); const next = idx < statusFlow.length - 1 ? statusFlow[idx + 1] : 'refunded'; setRmas(rmas.map((x: any) => x.id === r.id ? { ...x, status: next } : x)); log(`پیشبرد مرجوعی ${r.id}`, r.id); }} className="flex-1 bg-brand-900 text-white py-2 rounded-xl text-[11px] font-bold">مرحله بعدی</button>
+                <button onClick={() => { setRmas(rmas.map((x: any) => x.id === r.id ? { ...x, status: 'rejected' } : x)); log(`رد مرجوعی ${r.id}`, r.id, 'warning'); }} className="px-4 py-2 rounded-xl bg-coral-100 text-coral-700 text-[11px] font-bold">رد درخواست</button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -2136,20 +2410,143 @@ function AdminSupport() {
   const { tickets, setTickets, darkMode, log } = useAdmin();
   const [selected, setSelected] = useState<any>(null);
   const [reply, setReply] = useState('');
+  const [filter, setFilter] = useState('all');
+  const [priorityFilter, setPriorityFilter] = useState('all');
+
+  const filtered = tickets.filter((t: any) => {
+    if (filter !== 'all' && t.status !== filter) return false;
+    if (priorityFilter !== 'all' && t.priority !== priorityFilter) return false;
+    return true;
+  });
+
+  const stats = {
+    open: tickets.filter((t: any) => t.status === 'open').length,
+    pending: tickets.filter((t: any) => t.status === 'pending').length,
+    answered: tickets.filter((t: any) => t.status === 'answered').length,
+    closed: tickets.filter((t: any) => t.status === 'closed').length,
+  };
+
+  const priorityColors: Record<string, string> = { high: 'bg-coral-100 text-coral-700', medium: 'bg-amber-100 text-amber-700', low: 'bg-blue-100 text-blue-700' };
+  const priorityLabels: Record<string, string> = { high: 'فوری', medium: 'متوسط', low: 'کم' };
+  const statusLabels: Record<string, string> = { open: 'باز', pending: 'در انتظار', answered: 'پاسخ داده شده', closed: 'بسته' };
+
   return (
-    <div className="space-y-3">
-      {tickets.map((t: any) => (
-        <div key={t.id} className={`rounded-xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-4 cursor-pointer hover:shadow-md`} onClick={() => setSelected(t)}>
-          <div className="flex items-center justify-between"><span className="text-[12px] font-bold">{t.subject}</span><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${t.status === 'open' ? 'bg-coral-100 text-coral-700' : t.status === 'answered' ? 'bg-emerald-100 text-emerald-700' : 'bg-cream-100 text-cream-500'}`}>{t.status === 'open' ? 'باز' : t.status === 'answered' ? 'پاسخ داده شده' : 'بسته'}</span></div>
-          <p className="text-[11px] text-cream-500 mt-1">{t.customer} | {t.message}</p>
-        </div>
-      ))}
+    <div className="space-y-4">
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[
+          { l: 'تیکت‌های باز', v: faNum(stats.open), c: 'bg-coral-50 text-coral-700', icon: <IconAlert className="w-5 h-5" /> },
+          { l: 'در انتظار پاسخ', v: faNum(stats.pending), c: 'bg-amber-50 text-amber-700', icon: <IconClock className="w-5 h-5" /> },
+          { l: 'پاسخ داده شده', v: faNum(stats.answered), c: 'bg-emerald-50 text-emerald-700', icon: <IconCheck className="w-5 h-5" /> },
+          { l: 'بسته شده', v: faNum(stats.closed), c: 'bg-blue-50 text-blue-700', icon: <IconClipboard className="w-5 h-5" /> },
+        ].map((k, i) => (
+          <div key={i} className={`rounded-xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-4`}>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[10px] text-cream-500">{k.l}</p>
+              <div className={k.c + ' p-1.5 rounded-lg'}>{k.icon}</div>
+            </div>
+            <p className={`text-lg font-extrabold tnum ${darkMode ? 'text-white' : 'text-brand-900'}`}>{k.v}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-wrap gap-2">
+        <select value={filter} onChange={e => setFilter(e.target.value)} className="rounded-xl border border-cream-300 bg-white px-3 py-2 text-[12px] outline-none">
+          <option value="all">همه وضعیت‌ها</option>
+          <option value="open">باز</option>
+          <option value="pending">در انتظار</option>
+          <option value="answered">پاسخ داده شده</option>
+          <option value="closed">بسته</option>
+        </select>
+        <select value={priorityFilter} onChange={e => setPriorityFilter(e.target.value)} className="rounded-xl border border-cream-300 bg-white px-3 py-2 text-[12px] outline-none">
+          <option value="all">همه اولویت‌ها</option>
+          <option value="high">فوری</option>
+          <option value="medium">متوسط</option>
+          <option value="low">کم</option>
+        </select>
+      </div>
+
+      {/* Tickets List */}
+      <div className="space-y-3">
+        {filtered.map((t: any) => (
+          <div key={t.id} className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5 cursor-pointer hover:shadow-lg transition-all`} onClick={() => setSelected(t)}>
+            <div className="flex items-start justify-between mb-2">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <h4 className={`text-[13px] font-bold ${darkMode ? 'text-white' : 'text-brand-900'}`}>{t.subject}</h4>
+                  <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${priorityColors[t.priority]}`}>{priorityLabels[t.priority]}</span>
+                </div>
+                <p className="text-[11px] text-cream-500">{t.customer} | {t.mobile}</p>
+              </div>
+              <span className={`px-3 py-1 rounded-full text-[10px] font-bold ${t.status === 'open' ? 'bg-coral-100 text-coral-700' : t.status === 'answered' ? 'bg-emerald-100 text-emerald-700' : t.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-cream-100 text-cream-500'}`}>
+                {statusLabels[t.status]}
+              </span>
+            </div>
+            <p className="text-[12px] text-brand-700 line-clamp-2">{t.message}</p>
+            <div className="flex items-center justify-between mt-3 text-[10px] text-cream-500">
+              <span>{dayLabel(new Date(t.createdAt))}</span>
+              <span>{t.assignee || 'بدون مسئول'}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Ticket Detail Modal */}
       {selected && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setSelected(null)}>
-          <div className={`w-full max-w-md rounded-2xl ${darkMode ? 'bg-[#151b26]' : 'bg-white'} p-6 animate-rise max-h-[80vh] overflow-y-auto`} onClick={e => e.stopPropagation()}>
-            <h3 className="font-bold mb-3">{selected.subject}</h3>
-            <div className="space-y-2 mb-4">{selected.replies?.map((r: any, i: number) => (<div key={i} className={`p-2 rounded-lg text-[12px] ${r.from === 'customer' ? 'bg-cream-50' : 'bg-brand-50'}`}><p className="font-bold text-[10px] text-cream-500 mb-0.5">{r.from === 'customer' ? 'مشتری' : 'پشتیبانی'}</p>{r.text}</div>))}</div>
-            <div className="flex gap-2"><input value={reply} onChange={e => setReply(e.target.value)} placeholder="پاسخ..." className="flex-1 rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" /><button onClick={() => { const updated = tickets.map((t: any) => t.id === selected.id ? { ...t, replies: [...(t.replies || []), { from: 'support', text: reply, date: new Date().toISOString() }], status: 'answered' } : t); setTickets(updated); setSelected({ ...selected, status: 'answered' }); setReply(''); log(`پاسخ به تیکت ${selected.subject}`, selected.id); }} className="bg-brand-900 text-white px-3 py-2 rounded-xl text-[12px] font-bold"><IconSend className="w-4 h-4" /></button></div>
+          <div className={`w-full max-w-lg rounded-2xl ${darkMode ? 'bg-[#151b26]' : 'bg-white'} p-6 animate-rise max-h-[85vh] overflow-y-auto`} onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-brand-900'}`}>{selected.subject}</h3>
+              <button onClick={() => setSelected(null)}><IconX className="w-5 h-5" /></button>
+            </div>
+
+            {/* Ticket Info */}
+            <div className={`rounded-xl ${darkMode ? 'bg-[#1a212c]' : 'bg-cream-50'} p-4 mb-4`}>
+              <div className="grid grid-cols-2 gap-2 text-[11px]">
+                <div><span className="text-cream-500">مشتری: </span><span className="font-bold">{selected.customer}</span></div>
+                <div><span className="text-cream-500">موبایل: </span><span className="tnum">{selected.mobile}</span></div>
+                <div><span className="text-cream-500">اولویت: </span><span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${priorityColors[selected.priority]}`}>{priorityLabels[selected.priority]}</span></div>
+                <div><span className="text-cream-500">مسئول: </span><span className="font-bold">{selected.assignee || '-'}</span></div>
+              </div>
+            </div>
+
+            {/* Chat History */}
+            <div className="space-y-3 mb-4 max-h-64 overflow-y-auto">
+              {selected.replies?.map((r: any, i: number) => (
+                <div key={i} className={`p-3 rounded-xl text-[12px] ${r.from === 'customer' ? (darkMode ? 'bg-[#1a212c]' : 'bg-cream-50') : (darkMode ? 'bg-brand-900/20' : 'bg-brand-50')}`}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-bold text-[10px] text-cream-500">{r.from === 'customer' ? 'مشتری' : 'پشتیبانی'}</span>
+                    <span className="text-[9px] text-cream-500">{dayLabel(new Date(r.date))}</span>
+                  </div>
+                  <p className="text-brand-700">{r.text}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Reply Input */}
+            <div className="flex gap-2">
+              <input value={reply} onChange={e => setReply(e.target.value)} placeholder="پاسخ خود را بنویسید..." className="flex-1 rounded-xl border border-cream-300 px-3 py-2.5 text-[12px] outline-none focus:border-brand-400 focus:ring-4 focus:ring-brand-100" />
+              <button onClick={() => {
+                if (!reply.trim()) return;
+                const updated = tickets.map((t: any) => t.id === selected.id ? { ...t, replies: [...(t.replies || []), { from: 'support', text: reply, date: new Date().toISOString() }], status: 'answered' } : t);
+                setTickets(updated);
+                setSelected({ ...selected, status: 'answered', replies: [...(selected.replies || []), { from: 'support', text: reply, date: new Date().toISOString() }] });
+                setReply('');
+                log(`پاسخ به تیکت ${selected.subject}`, selected.id);
+              }} className="bg-brand-900 text-white px-4 py-2.5 rounded-xl text-[12px] font-bold flex items-center gap-1">
+                <IconSend className="w-4 h-4" /> ارسال
+              </button>
+            </div>
+
+            {/* Status Change */}
+            <div className="flex gap-2 mt-4 pt-4 border-t border-cream-200">
+              {['open', 'pending', 'answered', 'closed'].map(s => (
+                <button key={s} onClick={() => { setTickets(tickets.map((t: any) => t.id === selected.id ? { ...t, status: s } : t)); setSelected({ ...selected, status: s }); log(`تغییر وضعیت تیکت به ${statusLabels[s]}`, selected.id); }} className={`flex-1 py-2 rounded-xl text-[10px] font-bold ${selected.status === s ? 'bg-brand-900 text-white' : 'bg-cream-100 text-brand-700'}`}>
+                  {statusLabels[s]}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       )}
@@ -2159,17 +2556,122 @@ function AdminSupport() {
 
 function AdminOperations() {
   const { orders, darkMode } = useAdmin();
-  const last7 = Array.from({ length: 7 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() - (6 - i)); const ds = d.toISOString().slice(0, 10); return { day: faNum(d.getDate()), count: orders.filter((o: any) => o.createdAt?.slice(0, 10) === ds).length }; });
+  const last7 = Array.from({ length: 7 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() - (6 - i)); const ds = d.toISOString().slice(0, 10); return { day: faNum(d.getDate()), count: orders.filter((o: any) => o.createdAt?.slice(0, 10) === ds).length, revenue: orders.filter((o: any) => o.createdAt?.slice(0, 10) === ds).reduce((s: number, o: any) => s + (o.total || 0), 0) }; });
+  
+  const avgProcessingTime = 2.5; // hours
+  const deliveredOrders = orders.filter((o: any) => o.status === 'delivered');
+  const pendingOrders = orders.filter((o: any) => o.status === 'pending' || o.status === 'processing');
+  const successRate = orders.length ? (deliveredOrders.length / orders.length * 100).toFixed(1) : 0;
+
+  const operators = [
+    { name: 'اپراتور ۱', processed: 45, avgTime: 120 },
+    { name: 'اپراتور ۲', processed: 38, avgTime: 135 },
+    { name: 'اپراتور ۳', processed: 52, avgTime: 110 },
+  ];
+
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-3 gap-3">
-        {[{ l: 'سفارش پردازش‌شده', v: faNum(orders.filter((o: any) => o.status === 'delivered').length) }, { l: 'در انتظار', v: faNum(orders.filter((o: any) => o.status === 'pending').length) }, { l: 'تحویل موفق', v: faNum(orders.filter((o: any) => o.status === 'delivered').length) }].map((k, i) => (
-          <div key={i} className={`rounded-xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-3`}><p className="text-[10px] text-cream-500">{k.l}</p><p className={`text-lg font-extrabold tnum ${darkMode ? 'text-white' : 'text-brand-900'}`}>{k.v}</p></div>
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[
+          { l: 'سفارش پردازش‌شده', v: faNum(deliveredOrders.length), c: 'bg-emerald-50 text-emerald-700', icon: <IconCheck className="w-5 h-5" /> },
+          { l: 'در انتظار پردازش', v: faNum(pendingOrders.length), c: 'bg-amber-50 text-amber-700', icon: <IconClock className="w-5 h-5" /> },
+          { l: 'میانگین زمان (ساعت)', v: faNum(avgProcessingTime), c: 'bg-blue-50 text-blue-700', icon: <IconClock className="w-5 h-5" /> },
+          { l: 'نرخ موفقیت', v: `${faNum(successRate)}٪`, c: 'bg-purple-50 text-purple-700', icon: <IconTrending className="w-5 h-5" /> },
+        ].map((k, i) => (
+          <div key={i} className={`rounded-xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-4`}>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[10px] text-cream-500">{k.l}</p>
+              <div className={k.c + ' p-1.5 rounded-lg'}>{k.icon}</div>
+            </div>
+            <p className={`text-lg font-extrabold tnum ${darkMode ? 'text-white' : 'text-brand-900'}`}>{k.v}</p>
+          </div>
         ))}
       </div>
+
+      {/* Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
+          <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-3`}>سفارش‌های ۷ روز اخیر</h3>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={last7}>
+              <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? '#242e3b' : '#E8E1CC'} />
+              <XAxis dataKey="day" tick={{ fontSize: 10, fontFamily: 'Vazirmatn' }} stroke={darkMode ? '#8da5cc' : '#B8A97E'} />
+              <YAxis tick={{ fontSize: 10, fontFamily: 'Vazirmatn' }} stroke={darkMode ? '#8da5cc' : '#B8A97E'} />
+              <Tooltip contentStyle={{ background: '#0D1221', border: 'none', borderRadius: 12, color: '#fff', fontSize: 11 }} />
+              <Bar dataKey="count" fill="#1A2238" radius={[4, 4, 0, 0]} name="تعداد سفارش" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
+          <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-3`}>درآمد ۷ روز اخیر</h3>
+          <ResponsiveContainer width="100%" height={200}>
+            <AreaChart data={last7}>
+              <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? '#242e3b' : '#E8E1CC'} />
+              <XAxis dataKey="day" tick={{ fontSize: 10, fontFamily: 'Vazirmatn' }} stroke={darkMode ? '#8da5cc' : '#B8A97E'} />
+              <YAxis tick={{ fontSize: 10, fontFamily: 'Vazirmatn' }} stroke={darkMode ? '#8da5cc' : '#B8A97E'} tickFormatter={(v) => formatPrice(v / 1000000) + 'M'} />
+              <Tooltip contentStyle={{ background: '#0D1221', border: 'none', borderRadius: 12, color: '#fff', fontSize: 11 }} formatter={(v: any) => formatPrice(v) + ' تومان'} />
+              <defs>
+                <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#F5C518" stopOpacity={0.8}/>
+                  <stop offset="95%" stopColor="#F5C518" stopOpacity={0}/>
+                </linearGradient>
+              </defs>
+              <Area type="monotone" dataKey="revenue" stroke="#F5C518" fillOpacity={1} fill="url(#colorRevenue)" name="درآمد" />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Operator Performance */}
       <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
-        <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-3`}>سفارش‌های ۷ روز اخیر</h3>
-        <ResponsiveContainer width="100%" height={180}><BarChart data={last7}><CartesianGrid strokeDasharray="3 3" stroke={darkMode ? '#242e3b' : '#E8E1CC'} /><XAxis dataKey="day" tick={{ fontSize: 10 }} stroke={darkMode ? '#8da5cc' : '#B8A97E'} /><YAxis tick={{ fontSize: 10 }} stroke={darkMode ? '#8da5cc' : '#B8A97E'} /><Tooltip contentStyle={{ background: '#0D1221', border: 'none', borderRadius: 12, color: '#fff', fontSize: 11 }} /><Bar dataKey="count" fill="#1A2238" radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer>
+        <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-4`}>عملکرد اپراتورها</h3>
+        <div className="space-y-3">
+          {operators.map((op, i) => (
+            <div key={i} className={`rounded-xl ${darkMode ? 'bg-[#1a212c]' : 'bg-cream-50'} p-4`}>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-brand-100 flex items-center justify-center">
+                    <IconUser className="w-5 h-5 text-brand-700" />
+                  </div>
+                  <div>
+                    <p className="text-[12px] font-bold text-brand-900">{op.name}</p>
+                    <p className="text-[10px] text-cream-500">میانگین زمان: {faNum(op.avgTime)} دقیقه</p>
+                  </div>
+                </div>
+                <div className="text-left">
+                  <p className="text-[13px] font-extrabold tnum text-brand-900">{faNum(op.processed)}</p>
+                  <p className="text-[10px] text-cream-500">سفارش پردازش‌شده</p>
+                </div>
+              </div>
+              <div className="h-2 bg-cream-200 rounded-full overflow-hidden">
+                <div className="h-full bg-brand-900 rounded-full" style={{ width: `${(op.processed / 60) * 100}%` }}></div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Recent Orders */}
+      <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
+        <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-3`}>آخرین سفارش‌ها</h3>
+        <div className="space-y-2">
+          {orders.slice(0, 5).map((o: any) => (
+            <div key={o.id} className={`flex items-center justify-between p-3 rounded-xl ${darkMode ? 'bg-[#1a212c]' : 'bg-cream-50'}`}>
+              <div>
+                <p className="text-[12px] font-bold">{o.code}</p>
+                <p className="text-[10px] text-cream-500">{o.customer} | {dayLabel(new Date(o.createdAt))}</p>
+              </div>
+              <div className="text-left">
+                <p className="tnum text-[12px] font-bold">{formatPrice(o.total)}</p>
+                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${o.status === 'delivered' ? 'bg-emerald-100 text-emerald-700' : o.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>
+                  {o.status === 'delivered' ? 'تحویل شده' : o.status === 'pending' ? 'در انتظار' : 'در حال پردازش'}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -2327,27 +2829,91 @@ function AdminSettings() {
 }
 
 function AdminInsights() {
-  const { orders, darkMode } = useAdmin();
+  const { orders, darkMode, searchTerms } = useAdmin();
   const { products } = useShop();
-  const last7 = Array.from({ length: 7 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() - (6 - i)); const ds = d.toISOString().slice(0, 10); return orders.filter((o: any) => o.createdAt?.slice(0, 10) === ds).reduce((s: number, o: any) => s + (o.total || 0), 0); });
-  const avg = last7.reduce((a, b) => a + b, 0) / 7;
-  const slope = (last7[6] - last7[0]) / 7;
-  const forecast = Array.from({ length: 7 }, (_, i) => Math.max(0, avg + slope * (i + 1)));
-  const stockRisks = products.filter(p => p.stock > 0 && p.sales > 0 && p.stock / (p.sales / 30) < 7);
+  const last7 = Array.from({ length: 7 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() - (6 - i)); const ds = d.toISOString().slice(0, 10); return { day: faNum(d.getDate()), revenue: orders.filter((o: any) => o.createdAt?.slice(0, 10) === ds).reduce((s: number, o: any) => s + (o.total || 0), 0) }; });
+  const avg = last7.reduce((a, b) => a + b.revenue, 0) / 7;
+  const slope = (last7[6].revenue - last7[0].revenue) / 7;
+  const forecast = Array.from({ length: 7 }, (_, i) => ({ day: faNum(i + 8), value: Math.max(0, Math.round(avg + slope * (i + 1))) }));
+  const stdDev = Math.sqrt(last7.reduce((s, d) => s + (d.revenue - avg) ** 2, 0) / 7);
+  const anomalies = last7.filter(d => Math.abs(d.revenue - avg) > 1.5 * stdDev && d.revenue > 0);
+  const stockRisks = products.filter(p => p.stock > 0 && p.sales > 0 && p.stock / (p.sales / 30) < 7).sort((a, b) => (a.stock / (a.sales / 30)) - (b.stock / (b.sales / 30)));
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
-          <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-3`}>پیش‌بینی فروش ۷ روز آینده</h3>
-          <ResponsiveContainer width="100%" height={180}><LineChart data={forecast.map((v, i) => ({ day: faNum(i + 1), value: Math.round(v) }))}><CartesianGrid strokeDasharray="3 3" stroke={darkMode ? '#242e3b' : '#E8E1CC'} /><XAxis dataKey="day" tick={{ fontSize: 10 }} stroke={darkMode ? '#8da5cc' : '#B8A97E'} /><YAxis tick={{ fontSize: 10 }} stroke={darkMode ? '#8da5cc' : '#B8A97E'} /><Tooltip contentStyle={{ background: '#0D1221', border: 'none', borderRadius: 12, color: '#fff', fontSize: 11 }} /><Line dataKey="value" stroke="#F5C518" strokeWidth={2} /></LineChart></ResponsiveContainer>
-          <p className="text-[11px] text-cream-500 mt-2">شیب روند: {slope > 0 ? 'صعودی' : 'نزولی'} | میانگین روزانه: {formatPrice(avg)} تومان</p>
+      {/* KPI */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[
+          { l: 'روند فروش', v: slope > 0 ? 'صعودی' : slope < 0 ? 'نزولی' : 'ثابت', c: slope > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-coral-50 text-coral-700', icon: <IconTrending className="w-5 h-5" /> },
+          { l: 'ناهنجاری‌ها', v: faNum(anomalies.length), c: 'bg-amber-50 text-amber-700', icon: <IconAlert className="w-5 h-5" /> },
+          { l: 'هشدار موجودی', v: faNum(stockRisks.length), c: 'bg-coral-50 text-coral-700', icon: <IconPackage className="w-5 h-5" /> },
+          { l: 'پیش‌بینی هفته', v: formatPrice(forecast.reduce((a, b) => a + b.value, 0)), c: 'bg-blue-50 text-blue-700', icon: <IconChart className="w-5 h-5" /> },
+        ].map((k, i) => (
+          <div key={i} className={`rounded-xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-4`}>
+            <div className="flex items-center justify-between mb-2"><p className="text-[10px] text-cream-500">{k.l}</p><div className={k.c + ' p-1.5 rounded-lg'}>{k.icon}</div></div>
+            <p className={`text-lg font-extrabold tnum ${darkMode ? 'text-white' : 'text-brand-900'}`}>{k.v}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Forecast Chart */}
+      <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
+        <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-3`}>پیش‌بینی فروش ۷ روز آینده</h3>
+        <ResponsiveContainer width="100%" height={200}>
+          <AreaChart data={forecast}>
+            <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? '#242e3b' : '#E8E1CC'} />
+            <XAxis dataKey="day" tick={{ fontSize: 10, fontFamily: 'Vazirmatn' }} stroke={darkMode ? '#8da5cc' : '#B8A97E'} />
+            <YAxis tick={{ fontSize: 10, fontFamily: 'Vazirmatn' }} stroke={darkMode ? '#8da5cc' : '#B8A97E'} tickFormatter={(v) => formatPrice(v / 1000000) + 'M'} />
+            <Tooltip contentStyle={{ background: '#0D1221', border: 'none', borderRadius: 12, color: '#fff', fontSize: 11 }} formatter={(v: any) => formatPrice(v) + ' تومان'} />
+            <defs><linearGradient id="colorFc" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#F5C518" stopOpacity={0.8}/><stop offset="95%" stopColor="#F5C518" stopOpacity={0}/></linearGradient></defs>
+            <Area type="monotone" dataKey="value" stroke="#F5C518" fillOpacity={1} fill="url(#colorFc)" name="پیش‌بینی" />
+          </AreaChart>
+        </ResponsiveContainer>
+        <div className="grid grid-cols-3 gap-3 mt-4 text-center">
+          <div><p className="text-[10px] text-cream-500">میانگین روزانه</p><p className="tnum text-[13px] font-bold">{formatPrice(avg)}</p></div>
+          <div><p className="text-[10px] text-cream-500">پیشنهاد انبار</p><p className={`text-[13px] font-bold ${slope > 0 ? 'text-emerald-600' : 'text-coral-600'}`}>{slope > 0 ? 'افزایش موجودی' : 'کاهش سفارش'}</p></div>
+          <div><p className="text-[10px] text-cream-500">اوج تقاضا</p><p className="text-[13px] font-bold">{slope > 0 ? 'پایان هفته' : 'اوایل هفته'}</p></div>
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Anomalies */}
+        <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
+          <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-3`}>ناهنجاری‌های شناسایی‌شده</h3>
+          {anomalies.length > 0 ? (
+            <div className="space-y-2">{anomalies.map((a, i) => (
+              <div key={i} className={`p-3 rounded-xl ${a.revenue > avg ? 'bg-emerald-50 border border-emerald-200' : 'bg-coral-50 border border-coral-200'}`}>
+                <div className="flex items-center justify-between"><span className="text-[11px] font-bold">{a.revenue > avg ? 'رشد غیرمنتظره' : 'افت غیرمنتظره'}</span><span className="text-[10px] text-cream-500">روز {a.day}</span></div>
+                <p className="tnum text-[13px] font-extrabold mt-1">{formatPrice(a.revenue)} تومان</p>
+              </div>
+            ))}</div>
+          ) : <p className="text-[12px] text-cream-500 text-center py-4">ناهنجاری شناسایی نشد</p>}
+        </div>
+
+        {/* Stock Risks */}
         <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
           <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-3`}>هشدار اتمام موجودی</h3>
-          {stockRisks.length === 0 ? <p className="text-[12px] text-cream-500">موردی یافت نشد</p> : (
-            <div className="space-y-2">{stockRisks.map(p => (<div key={p.id} className="flex items-center gap-2 p-2 rounded-lg bg-coral-50"><img src={p.image} className="w-8 h-8 rounded-lg object-cover" alt="" /><div><p className="text-[11px] font-bold">{p.name}</p><p className="text-[10px] text-coral-600">موجودی: {faNum(p.stock)} | فروش روزانه: {faNum(Math.round(p.sales / 30))}</p></div></div>))}</div>
-          )}
+          {stockRisks.length > 0 ? (
+            <div className="space-y-2 max-h-60 overflow-y-auto">{stockRisks.slice(0, 8).map(p => (
+              <div key={p.id} className="flex items-center gap-3 p-2 rounded-xl bg-coral-50 border border-coral-200">
+                <img src={p.image} className="w-10 h-10 rounded-lg object-cover" alt="" />
+                <div className="flex-1"><p className="text-[11px] font-bold">{p.name}</p><p className="text-[10px] text-cream-500">{p.brand}</p></div>
+                <div className="text-left"><p className="tnum text-[12px] font-extrabold text-coral-600">{faNum(p.stock)}</p><p className="text-[9px] text-cream-500">روز باقی: {faNum(Math.max(1, Math.round(p.stock / (p.sales / 30))))}</p></div>
+              </div>
+            ))}</div>
+          ) : <p className="text-[12px] text-cream-500 text-center py-4">همه محصولات موجودی کافی دارند</p>}
+        </div>
+      </div>
+
+      {/* Search Terms */}
+      <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
+        <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-3`}>پرجستجوترین عبارات کاربران</h3>
+        <div className="flex flex-wrap gap-2">
+          {searchTerms.slice(0, 12).map((t: any, i: number) => (
+            <span key={i} className={`px-3 py-1.5 rounded-full text-[11px] font-bold ${t.trending ? 'bg-brand-900 text-white' : darkMode ? 'bg-white/10 text-brand-300' : 'bg-cream-100 text-brand-700'}`}>
+              {t.term} <span className="tnum opacity-70">({faNum(t.count)})</span>
+            </span>
+          ))}
         </div>
       </div>
     </div>
@@ -2356,96 +2922,436 @@ function AdminInsights() {
 
 function AdminAffiliates() {
   const { affiliates, setAffiliates, payouts, setPayouts, affConf, setAffConf, darkMode, log } = useAdmin();
+  const [tab, setTab] = useState<'affiliates' | 'payouts' | 'config' | 'tools'>('affiliates');
+  
+  const totalSales = affiliates.reduce((s: number, a: any) => s + a.sales, 0);
+  const totalCommission = affiliates.reduce((s: number, a: any) => s + a.commission, 0);
+  const flaggedCount = affiliates.filter((a: any) => a.flagged).length;
+  const levelColors: Record<string, string> = { silver: 'bg-gray-100 text-gray-700', gold: 'bg-amber-100 text-amber-700', platinum: 'bg-purple-100 text-purple-700' };
+  const levelLabels: Record<string, string> = { silver: 'نقره‌ای', gold: 'طلایی', platinum: 'پلاتینیوم' };
+
   return (
     <div className="space-y-4">
-      <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
-        <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-3`}>کارگزاران</h3>
-        <table className="w-full text-[12px]"><thead><tr className={`border-y ${darkMode ? 'border-white/10 bg-white/5' : 'border-cream-300 bg-cream-100/70'}`}><th className="text-start py-2 px-2 font-bold text-cream-500">نام</th><th className="text-start py-2 px-2 font-bold text-cream-500">کد</th><th className="text-start py-2 px-2 font-bold text-cream-500">سطح</th><th className="text-start py-2 px-2 font-bold text-cream-500">فروش</th><th className="text-start py-2 px-2 font-bold text-cream-500">پورسانت</th><th className="text-start py-2 px-2 font-bold text-cream-500">وضعیت</th></tr></thead>
-          <tbody>{affiliates.map((a: any) => (<tr key={a.id} className={`border-b ${darkMode ? 'border-white/5' : 'border-cream-100'} ${a.flagged ? 'bg-coral-50' : ''}`}><td className="py-2 px-2 font-bold">{a.name}{a.flagged && <IconAlert className="w-3 h-3 text-coral-500 inline ms-1" />}</td><td className="py-2 px-2 tnum">{a.refCode}</td><td className="py-2 px-2">{a.level}</td><td className="py-2 px-2 tnum">{formatPrice(a.sales)}</td><td className="py-2 px-2 tnum">{formatPrice(a.commission)}</td><td className="py-2 px-2"><button onClick={() => { setAffiliates(affiliates.map((x: any) => x.id === a.id ? { ...x, active: !x.active } : x)); }} className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${a.active ? 'bg-emerald-100 text-emerald-700' : 'bg-coral-100 text-coral-700'}`}>{a.active ? 'فعال' : 'مسدود'}</button></td></tr>))}</tbody>
-        </table>
+      {/* KPI */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[
+          { l: 'کل بازاریابان', v: faNum(affiliates.length), c: 'bg-blue-50 text-blue-700', icon: <IconUsers className="w-5 h-5" /> },
+          { l: 'فروش کل', v: formatPrice(totalSales), c: 'bg-emerald-50 text-emerald-700', icon: <IconTrending className="w-5 h-5" /> },
+          { l: 'پورسانت کل', v: formatPrice(totalCommission), c: 'bg-purple-50 text-purple-700', icon: <IconDollar className="w-5 h-5" /> },
+          { l: 'هشدار تقلب', v: faNum(flaggedCount), c: 'bg-coral-50 text-coral-700', icon: <IconAlert className="w-5 h-5" /> },
+        ].map((k, i) => (
+          <div key={i} className={`rounded-xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-4`}>
+            <div className="flex items-center justify-between mb-2"><p className="text-[10px] text-cream-500">{k.l}</p><div className={k.c + ' p-1.5 rounded-lg'}>{k.icon}</div></div>
+            <p className={`text-lg font-extrabold tnum ${darkMode ? 'text-white' : 'text-brand-900'}`}>{k.v}</p>
+          </div>
+        ))}
       </div>
-      <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
-        <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-3`}>صف تسویه‌ها</h3>
-        <div className="space-y-2">{payouts.map((p: any) => (<div key={p.id} className="flex items-center justify-between p-2 rounded-lg bg-cream-50"><span className="text-[12px]">مبلغ: {formatPrice(p.amount)} | وضعیت: {p.status === 'paid' ? 'پرداخت شده' : 'در انتظار'}</span>{p.status === 'pending' && <button onClick={() => { setPayouts(payouts.map((x: any) => x.id === p.id ? { ...x, status: 'paid' } : x)); }} className="px-2 py-1 rounded-lg bg-brand-900 text-white text-[10px] font-bold">پرداخت</button>}</div>))}</div>
+
+      {/* Tabs */}
+      <div className="flex flex-wrap gap-2 border-b border-cream-300">
+        {[{ k: 'affiliates', l: 'بازاریابان' }, { k: 'payouts', l: 'تسویه‌ها' }, { k: 'config', l: 'پیکربندی پورسانت' }, { k: 'tools', l: 'ابزار تبلیغاتی' }].map(t => (
+          <button key={t.k} onClick={() => setTab(t.k as any)} className={`pb-2 px-3 text-[12px] font-bold border-b-2 transition-colors ${tab === t.k ? 'border-brand-900 text-brand-900' : 'border-transparent text-cream-500 hover:text-brand-700'}`}>{t.l}</button>
+        ))}
       </div>
+
+      {/* Affiliates Tab */}
+      {tab === 'affiliates' && (
+        <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} overflow-hidden`}>
+          <div className="overflow-x-auto">
+            <table className="w-full text-[12px]">
+              <thead><tr className={`border-y ${darkMode ? 'border-white/10 bg-white/5' : 'border-cream-300 bg-cream-100/70'}`}>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">نام</th>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">کد معرف</th>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">سطح</th>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">کلیک</th>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">سفارش</th>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">نرخ تبدیل</th>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">فروش</th>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">پورسانت</th>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">وضعیت</th>
+              </tr></thead>
+              <tbody>{affiliates.map((a: any) => {
+                const convRate = a.clicks > 0 ? ((a.orders / a.clicks) * 100).toFixed(1) : '0';
+                return (
+                <tr key={a.id} className={`border-b ${darkMode ? 'border-white/5 hover:bg-white/5' : 'border-cream-100 hover:bg-brand-50/40'} ${a.flagged ? 'bg-coral-50/50' : ''}`}>
+                  <td className="py-2.5 px-3 font-bold">{a.name}{a.flagged && <IconAlert className="w-3 h-3 text-coral-500 inline me-1" />}</td>
+                  <td className="py-2.5 px-3 tnum font-mono text-brand-700">{a.refCode}</td>
+                  <td className="py-2.5 px-3"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${levelColors[a.level]}`}>{levelLabels[a.level]}</span></td>
+                  <td className="py-2.5 px-3 tnum">{faNum(a.clicks)}</td>
+                  <td className="py-2.5 px-3 tnum">{faNum(a.orders)}</td>
+                  <td className="py-2.5 px-3 tnum">{faNum(convRate)}٪</td>
+                  <td className="py-2.5 px-3 tnum">{formatPrice(a.sales)}</td>
+                  <td className="py-2.5 px-3 tnum font-bold">{formatPrice(a.commission)}</td>
+                  <td className="py-2.5 px-3">
+                    <button onClick={() => { setAffiliates(affiliates.map((x: any) => x.id === a.id ? { ...x, active: !x.active } : x)); log(`${a.active ? 'مسدود' : 'فعال'} کردن بازاریاب ${a.name}`, a.id); }} className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${a.active ? 'bg-emerald-100 text-emerald-700' : 'bg-coral-100 text-coral-700'}`}>{a.active ? 'فعال' : 'مسدود'}</button>
+                  </td>
+                </tr>);
+              })}</tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Payouts Tab */}
+      {tab === 'payouts' && (
+        <div className="space-y-3">
+          {payouts.map((p: any) => {
+            const aff = affiliates.find((a: any) => a.id === p.affiliateId);
+            return (
+              <div key={p.id} className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-4 flex items-center justify-between hover:shadow-md transition-all`}>
+                <div>
+                  <p className="text-[12px] font-bold">{aff?.name || 'نامشخص'}</p>
+                  <p className="text-[10px] text-cream-500 mt-1">تاریخ: {dayLabel(new Date(p.date))} | کد پیگیری: {p.tracking || '-'}</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="tnum text-[13px] font-extrabold">{formatPrice(p.amount)} تومان</span>
+                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${p.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : p.status === 'rejected' ? 'bg-coral-100 text-coral-700' : 'bg-amber-100 text-amber-700'}`}>
+                    {p.status === 'paid' ? 'پرداخت شده' : p.status === 'rejected' ? 'رد شده' : 'در انتظار'}
+                  </span>
+                  {p.status === 'pending' && (
+                    <div className="flex gap-1">
+                      <button onClick={() => { setPayouts(payouts.map((x: any) => x.id === p.id ? { ...x, status: 'paid', tracking: 'TRX-' + Date.now() } : x)); log(`پرداخت پورسانت ${aff?.name}`, p.id); }} className="px-2 py-1 rounded-lg bg-brand-900 text-white text-[10px] font-bold">پرداخت</button>
+                      <button onClick={() => { setPayouts(payouts.map((x: any) => x.id === p.id ? { ...x, status: 'rejected' } : x)); }} className="px-2 py-1 rounded-lg bg-coral-100 text-coral-700 text-[10px] font-bold">رد</button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Config Tab */}
+      {tab === 'config' && (
+        <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
+          <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-4`}>پیکربندی پورسانت</h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div><label className="text-[11px] font-bold text-cream-500 mb-1 block">نرخ پایه (٪)</label><input type="number" value={affConf.baseRate} onChange={e => setAffConf({ ...affConf, baseRate: +e.target.value })} className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" /></div>
+            <div><label className="text-[11px] font-bold text-cream-500 mb-1 block">اعتبار کوکی (روز)</label><input type="number" value={affConf.cookieDays} onChange={e => setAffConf({ ...affConf, cookieDays: +e.target.value })} className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" /></div>
+            <div><label className="text-[11px] font-bold text-cream-500 mb-1 block">حداقل مبلغ برداشت</label><input type="number" value={affConf.minWithdraw} onChange={e => setAffConf({ ...affConf, minWithdraw: +e.target.value })} className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" /></div>
+            <div><label className="text-[11px] font-bold text-cream-500 mb-1 block">سقف پورسانت هر سفارش</label><input type="number" value={affConf.maxPerOrder} onChange={e => setAffConf({ ...affConf, maxPerOrder: +e.target.value })} className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" /></div>
+          </div>
+          <h4 className={`text-[12px] font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mt-4 mb-2`}>پاداش سطح</h4>
+          <div className="grid grid-cols-3 gap-3">
+            {Object.entries(affConf.levelBonus).map(([level, bonus]) => (
+              <div key={level}><label className="text-[10px] text-cream-500 mb-1 block">{levelLabels[level] || level} (٪ اضافی)</label><input type="number" value={bonus as number} onChange={e => setAffConf({ ...affConf, levelBonus: { ...affConf.levelBonus, [level]: +e.target.value } })} className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" /></div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Tools Tab */}
+      {tab === 'tools' && (
+        <div className="space-y-4">
+          <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
+            <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-3`}>تولید لینک عمیق</h3>
+            <div className="flex gap-2">
+              <input placeholder="آدرس صفحه مقصد (مثلاً /product/p1)" className="flex-1 rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" />
+              <select className="rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none">
+                {affiliates.filter((a: any) => a.active).map((a: any) => <option key={a.id} value={a.refCode}>{a.name} ({a.refCode})</option>)}
+              </select>
+              <button className="bg-brand-900 text-white px-4 py-2 rounded-xl text-[12px] font-bold">تولید لینک</button>
+            </div>
+          </div>
+          <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
+            <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-3`}>کتابخانه بنرها</h3>
+            <div className="grid grid-cols-3 gap-3">
+              {[{ w: '728x90', l: 'بنر افقی' }, { w: '300x300', l: 'بنر مربع' }, { w: '160x600', l: 'بنر عمودی' }].map((b, i) => (
+                <div key={i} className={`rounded-xl border-2 border-dashed ${darkMode ? 'border-white/20' : 'border-cream-300'} p-4 text-center`}>
+                  <div className="bg-brand-100 rounded-lg mb-2 flex items-center justify-center" style={{ height: '60px' }}><span className="text-[10px] text-brand-700">{b.w}</span></div>
+                  <p className="text-[11px] font-bold">{b.l}</p>
+                  <button className="mt-2 text-[10px] font-bold text-brand-600">دانلود</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 function AdminPOS() {
-  const { products, setProducts, addToCart } = useShop();
+  const { products, setProducts } = useShop();
   const { darkMode, log } = useAdmin();
   const [cart, setCart] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState('');
-  const filtered = products.filter(p => p.effective && (!catFilter || p.category === catFilter) && (!search || p.name.includes(search)));
+  const [customerName, setCustomerName] = useState('مشتری حضوری');
+  const [showReceipt, setShowReceipt] = useState(false);
+  const [lastReceipt, setLastReceipt] = useState<any>(null);
+  const filtered = products.filter(p => p.effective && p.stock > 0 && (!catFilter || p.category === catFilter) && (!search || p.name.includes(search)));
 
   const addItem = (p: Product) => {
     const existing = cart.find(c => c.id === p.id);
-    if (existing) setCart(cart.map(c => c.id === p.id ? { ...c, qty: c.qty + 1 } : c));
-    else setCart([...cart, { id: p.id, name: p.name, price: finalPrice(p.price, p.discount), qty: 1 }]);
+    if (existing) {
+      if (existing.qty >= p.stock) return;
+      setCart(cart.map(c => c.id === p.id ? { ...c, qty: c.qty + 1 } : c));
+    } else {
+      setCart([...cart, { id: p.id, name: p.name, price: finalPrice(p.price, p.discount), qty: 1, image: p.image }]);
+    }
   };
 
+  const removeItem = (idx: number) => setCart(cart.filter((_, i) => i !== idx));
+  const updateQty = (idx: number, qty: number) => {
+    if (qty <= 0) return removeItem(idx);
+    setCart(cart.map((c, i) => i === idx ? { ...c, qty } : c));
+  };
+
+  const subtotal = cart.reduce((s, c) => s + c.price * c.qty, 0);
+  const tax = Math.round(subtotal * 0.09);
+  const total = subtotal + tax;
+
   const checkout = () => {
-    const total = cart.reduce((s, c) => s + c.price * c.qty, 0);
-    cart.forEach(c => { const p = products.find(x => x.id === c.id); if (p) { p.stock -= c.qty; } });
+    cart.forEach(c => { const p = products.find(x => x.id === c.id); if (p) p.stock -= c.qty; });
     setProducts([...products]);
-    log(`فروش حضوری - ${formatPrice(total)} تومان`, 'pos');
-    alert(`فاکتور صادر شد. مبلغ: ${formatPrice(total)} تومان`);
+    const receipt = { id: `POS-${Date.now()}`, customer: customerName, items: [...cart], subtotal, tax, total, date: new Date().toISOString() };
+    setLastReceipt(receipt);
+    setShowReceipt(true);
+    log(`فروش حضوری ${customerName} - ${formatPrice(total)} تومان`, 'pos');
     setCart([]);
   };
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
       <div className="lg:col-span-2 space-y-3">
-        <div className="flex gap-2"><input value={search} onChange={e => setSearch(e.target.value)} placeholder="جستجو یا اسکن بارکد..." className="flex-1 rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" /><select value={catFilter} onChange={e => setCatFilter(e.target.value)} className="rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none"><option value="">همه</option>{categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-[60vh] overflow-y-auto">{filtered.map(p => (<button key={p.id} onClick={() => addItem(p)} className={`rounded-xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-200 bg-white'} p-2 text-start hover:shadow-md transition-all`}><img src={p.image} className="w-full aspect-square rounded-lg object-cover mb-1" alt="" /><p className="text-[10px] font-bold truncate">{p.name}</p><p className="text-[10px] text-cream-500">موجودی: {faNum(p.stock)}</p></button>))}</div>
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <IconSearch className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-cream-500" />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="جستجو یا اسکن بارکد..." className="w-full rounded-xl border border-cream-300 bg-white py-2.5 pr-10 pl-4 text-[12px] outline-none focus:border-brand-400 focus:ring-4 focus:ring-brand-100" />
+          </div>
+          <select value={catFilter} onChange={e => setCatFilter(e.target.value)} className="rounded-xl border border-cream-300 bg-white px-3 py-2 text-[12px] outline-none">
+            <option value="">همه دسته‌ها</option>{categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
+        <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-[60vh] overflow-y-auto">
+          {filtered.map(p => (
+            <button key={p.id} onClick={() => addItem(p)} className={`rounded-xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-200 bg-white'} p-2 text-start hover:shadow-lg hover:-translate-y-0.5 transition-all`}>
+              <img src={p.image} className="w-full aspect-square rounded-lg object-cover mb-1" alt="" />
+              <p className="text-[10px] font-bold truncate">{p.name}</p>
+              <div className="flex justify-between items-center mt-1">
+                <span className="tnum text-[10px] font-bold text-brand-700">{formatPrice(finalPrice(p.price, p.discount))}</span>
+                <span className={`text-[9px] ${p.stock <= 5 ? 'text-coral-600 font-bold' : 'text-cream-500'}`}>{faNum(p.stock)}</span>
+              </div>
+            </button>
+          ))}
+        </div>
       </div>
+
+      {/* Cart Panel */}
       <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-4 h-fit sticky top-24`}>
         <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-3`}>فاکتور جاری</h3>
-        <div className="space-y-2 max-h-60 overflow-y-auto">{cart.map((c, i) => (<div key={i} className="flex justify-between text-[12px]"><span>{c.name} x{faNum(c.qty)}</span><span className="tnum">{formatPrice(c.price * c.qty)}</span></div>))}</div>
-        {cart.length > 0 && (<><div className="border-t border-cream-200 mt-2 pt-2 flex justify-between font-bold text-[13px]"><span>جمع کل</span><span className="tnum">{formatPrice(cart.reduce((s, c) => s + c.price * c.qty, 0))} تومان</span></div><button onClick={checkout} className="w-full mt-3 bg-brand-900 text-white py-2.5 rounded-xl font-bold text-[12px]">صدور فاکتور</button></>)}
+        <input value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="نام مشتری" className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none mb-3" />
+        
+        <div className="space-y-2 max-h-60 overflow-y-auto mb-3">
+          {cart.length === 0 && <p className="text-[12px] text-cream-500 text-center py-4">سبد خالی است</p>}
+          {cart.map((c, i) => (
+            <div key={i} className={`flex items-center gap-2 p-2 rounded-lg ${darkMode ? 'bg-[#1a212c]' : 'bg-cream-50'}`}>
+              <img src={c.image} className="w-8 h-8 rounded-lg object-cover" alt="" />
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] font-bold truncate">{c.name}</p>
+                <div className="flex items-center gap-1 mt-0.5">
+                  <button onClick={() => updateQty(i, c.qty - 1)} className="w-5 h-5 rounded bg-cream-200 flex items-center justify-center text-[10px]"><IconMinus className="w-3 h-3" /></button>
+                  <span className="tnum text-[11px] font-bold w-6 text-center">{faNum(c.qty)}</span>
+                  <button onClick={() => updateQty(i, c.qty + 1)} className="w-5 h-5 rounded bg-cream-200 flex items-center justify-center text-[10px]"><IconPlus className="w-3 h-3" /></button>
+                </div>
+              </div>
+              <span className="tnum text-[11px] font-bold">{formatPrice(c.price * c.qty)}</span>
+            </div>
+          ))}
+        </div>
+
+        {cart.length > 0 && (
+          <div className="border-t border-cream-200 pt-3 space-y-1 text-[12px]">
+            <div className="flex justify-between"><span className="text-cream-500">جمع اقلام:</span><span className="tnum">{formatPrice(subtotal)}</span></div>
+            <div className="flex justify-between"><span className="text-cream-500">مالیات (۹٪):</span><span className="tnum">{formatPrice(tax)}</span></div>
+            <div className="flex justify-between font-extrabold text-[14px] text-brand-900 pt-2 border-t border-cream-200"><span>مبلغ قابل پرداخت:</span><span className="tnum">{formatPrice(total)} تومان</span></div>
+            <button onClick={checkout} className="w-full mt-3 bg-brand-900 text-white py-3 rounded-xl font-extrabold text-[12px] shadow-lg shadow-brand-900/25 flex items-center justify-center gap-2">
+              <IconCheck className="w-4 h-4" /> صدور فاکتور و پرداخت
+            </button>
+          </div>
+        )}
       </div>
+
+      {/* Receipt Modal */}
+      {showReceipt && lastReceipt && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setShowReceipt(false)}>
+          <div className={`w-full max-w-sm rounded-2xl ${darkMode ? 'bg-[#151b26]' : 'bg-white'} p-6 animate-rise`} onClick={e => e.stopPropagation()}>
+            <div className="text-center mb-4">
+              <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-2"><IconCheck className="w-6 h-6 text-emerald-600" /></div>
+              <h3 className="font-bold text-brand-900">فاکتور صادر شد</h3>
+              <p className="text-[11px] text-cream-500">{lastReceipt.id}</p>
+            </div>
+            <div className="space-y-1 text-[12px] border-t border-cream-200 pt-3">
+              <div className="flex justify-between"><span>مشتری:</span><span className="font-bold">{lastReceipt.customer}</span></div>
+              <div className="flex justify-between"><span>تعداد اقلام:</span><span className="tnum">{faNum(lastReceipt.items.length)}</span></div>
+              <div className="flex justify-between font-extrabold text-[14px] pt-2 border-t border-cream-200"><span>مبلغ:</span><span className="tnum">{formatPrice(lastReceipt.total)} تومان</span></div>
+            </div>
+            <button onClick={() => setShowReceipt(false)} className="w-full mt-4 bg-brand-900 text-white py-2.5 rounded-xl font-bold text-[12px]">فروش جدید</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 function AdminContentManager() {
   const { pages, setPages, banners, setBanners, posts, setPosts, darkMode, log } = useAdmin();
-  const [tab, setTab] = useState<'pages' | 'banners' | 'blog'>('pages');
+  const [tab, setTab] = useState<'pages' | 'banners' | 'blog' | 'seo'>('pages');
   const [editing, setEditing] = useState<any>(null);
+
+  const stats = {
+    pages: pages.length,
+    banners: banners.length,
+    activeBanners: banners.filter((b: any) => b.active).length,
+    posts: posts.length,
+    totalViews: posts.reduce((s: number, p: any) => s + (p.views || 0), 0),
+  };
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-2 border-b border-cream-300">{[{ k: 'pages', l: 'صفحات' }, { k: 'banners', l: 'بنرها' }, { k: 'blog', l: 'وبلاگ' }].map(t => (<button key={t.k} onClick={() => setTab(t.k as any)} className={`pb-2 text-[12px] font-bold border-b-2 ${tab === t.k ? 'border-brand-900 text-brand-900' : 'border-transparent text-cream-500'}`}>{t.l}</button>))}</div>
+      {/* KPI */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[
+          { l: 'صفحات', v: faNum(stats.pages), c: 'bg-blue-50 text-blue-700', icon: <IconClipboard className="w-5 h-5" /> },
+          { l: 'بنرهای فعال', v: `${faNum(stats.activeBanners)}/${faNum(stats.banners)}`, c: 'bg-purple-50 text-purple-700', icon: <IconCamera className="w-5 h-5" /> },
+          { l: 'پست‌های وبلاگ', v: faNum(stats.posts), c: 'bg-emerald-50 text-emerald-700', icon: <IconEdit className="w-5 h-5" /> },
+          { l: 'کل بازدید', v: faNum(stats.totalViews), c: 'bg-amber-50 text-amber-700', icon: <IconEye className="w-5 h-5" /> },
+        ].map((k, i) => (
+          <div key={i} className={`rounded-xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-4`}>
+            <div className="flex items-center justify-between mb-2"><p className="text-[10px] text-cream-500">{k.l}</p><div className={k.c + ' p-1.5 rounded-lg'}>{k.icon}</div></div>
+            <p className={`text-lg font-extrabold tnum ${darkMode ? 'text-white' : 'text-brand-900'}`}>{k.v}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Tabs */}
+      <div className="flex flex-wrap gap-2 border-b border-cream-300">
+        {[{ k: 'pages', l: 'صفحات ایستا' }, { k: 'banners', l: 'بنرها و اسلایدر' }, { k: 'blog', l: 'وبلاگ' }, { k: 'seo', l: 'ابزار سئو' }].map(t => (
+          <button key={t.k} onClick={() => setTab(t.k as any)} className={`pb-2 px-3 text-[12px] font-bold border-b-2 transition-colors ${tab === t.k ? 'border-brand-900 text-brand-900' : 'border-transparent text-cream-500 hover:text-brand-700'}`}>{t.l}</button>
+        ))}
+      </div>
+
+      {/* Pages Tab */}
       {tab === 'pages' && (
         <div className="space-y-3">
-          <button onClick={() => setEditing({ id: '', slug: '', title: '', content: '', metaTitle: '', metaDesc: '', keywords: '', published: true })} className="bg-brand-900 text-white px-4 py-2 rounded-xl text-[12px] font-bold flex items-center gap-1"><IconPlus className="w-4 h-4" />صفحه جدید</button>
-          {pages.map((p: any) => (<div key={p.id} className={`rounded-xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-3 flex items-center justify-between`}><div><p className="text-[12px] font-bold">{p.title}</p><p className="text-[10px] text-cream-500">/{p.slug}</p></div><div className="flex gap-1"><button onClick={() => setEditing(p)} className="p-1.5 rounded-lg hover:bg-cream-100"><IconEdit className="w-3.5 h-3.5 text-brand-600" /></button><button onClick={() => { setPages(pages.filter((x: any) => x.id !== p.id)); }} className="p-1.5 rounded-lg hover:bg-coral-50"><IconTrash className="w-3.5 h-3.5 text-coral-500" /></button></div></div>))}
+          <button onClick={() => setEditing({ id: '', slug: '', title: '', content: '', metaTitle: '', metaDesc: '', keywords: '', published: true })} className="bg-brand-900 text-white px-4 py-2.5 rounded-xl text-[12px] font-bold flex items-center gap-1 shadow-lg shadow-brand-900/25"><IconPlus className="w-4 h-4" />صفحه جدید</button>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {pages.map((p: any) => (
+              <div key={p.id} className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-4 hover:shadow-lg transition-all`}>
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className={`text-[13px] font-bold ${darkMode ? 'text-white' : 'text-brand-900'}`}>{p.title}</h4>
+                  <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${p.published ? 'bg-emerald-100 text-emerald-700' : 'bg-cream-100 text-cream-500'}`}>{p.published ? 'منتشر شده' : 'پیش‌نویس'}</span>
+                </div>
+                <p className="text-[10px] text-cream-500 mb-3 font-mono">/{p.slug}</p>
+                <div className="flex gap-1">
+                  <button onClick={() => setEditing(p)} className="flex-1 py-1.5 rounded-lg bg-cream-100 text-brand-700 text-[10px] font-bold flex items-center justify-center gap-1"><IconEdit className="w-3 h-3" /> ویرایش</button>
+                  <button onClick={() => { setPages(pages.filter((x: any) => x.id !== p.id)); log('حذف صفحه', p.title, 'warning'); }} className="py-1.5 px-3 rounded-lg bg-coral-100 text-coral-700 text-[10px] font-bold"><IconTrash className="w-3 h-3" /></button>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
+
+      {/* Banners Tab */}
       {tab === 'banners' && (
         <div className="space-y-3">
-          <button onClick={() => setEditing({ id: '', title: '', subtitle: '', btnText: 'مشاهده', position: 'home', active: true, expiresAt: '2025-12-31', color1: '#1A2238', color2: '#3d61a3' })} className="bg-brand-900 text-white px-4 py-2 rounded-xl text-[12px] font-bold flex items-center gap-1"><IconPlus className="w-4 h-4" />بنر جدید</button>
-          {banners.map((b: any) => (<div key={b.id} className="rounded-xl border border-cream-200 p-3 flex items-center justify-between"><div className="flex items-center gap-3"><div className="w-12 h-8 rounded-lg" style={{ background: `linear-gradient(135deg, ${b.color1}, ${b.color2})` }} /><div><p className="text-[12px] font-bold">{b.title}</p><p className="text-[10px] text-cream-500">{b.position}</p></div></div><button onClick={() => setBanners(banners.map((x: any) => x.id === b.id ? { ...x, active: !x.active } : x))} className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${b.active ? 'bg-emerald-100 text-emerald-700' : 'bg-cream-100 text-cream-500'}`}>{b.active ? 'فعال' : 'غیرفعال'}</button></div>))}
+          <button onClick={() => setEditing({ id: '', title: '', subtitle: '', btnText: 'مشاهده', position: 'home', active: true, expiresAt: '2025-12-31', color1: '#1A2238', color2: '#3d61a3' })} className="bg-brand-900 text-white px-4 py-2.5 rounded-xl text-[12px] font-bold flex items-center gap-1 shadow-lg shadow-brand-900/25"><IconPlus className="w-4 h-4" />بنر جدید</button>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {banners.map((b: any) => (
+              <div key={b.id} className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} overflow-hidden hover:shadow-lg transition-all`}>
+                <div className="h-24 flex items-center justify-center text-white" style={{ background: `linear-gradient(135deg, ${b.color1}, ${b.color2})` }}>
+                  <div className="text-center">
+                    <p className="text-[13px] font-bold">{b.title}</p>
+                    <p className="text-[10px] opacity-80">{b.subtitle}</p>
+                  </div>
+                </div>
+                <div className="p-3 flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] text-cream-500">جایگاه: {b.position} | انقضا: {b.expiresAt}</p>
+                  </div>
+                  <button onClick={() => setBanners(banners.map((x: any) => x.id === b.id ? { ...x, active: !x.active } : x))} className={`w-10 h-5 rounded-full relative transition-colors ${b.active ? 'bg-emerald-500' : 'bg-cream-300'}`}>
+                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${b.active ? 'right-0.5' : 'right-5'}`}></span>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
+
+      {/* Blog Tab */}
       {tab === 'blog' && (
         <div className="space-y-3">
-          <button onClick={() => setEditing({ id: '', title: '', category: '', tags: [], content: '', views: 0, date: new Date().toISOString(), color1: '#667eea', color2: '#764ba2', published: true, comments: 0 })} className="bg-brand-900 text-white px-4 py-2 rounded-xl text-[12px] font-bold flex items-center gap-1"><IconPlus className="w-4 h-4" />پست جدید</button>
-          {posts.map((p: any) => (<div key={p.id} className={`rounded-xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-3 flex items-center justify-between`}><div><p className="text-[12px] font-bold">{p.title}</p><p className="text-[10px] text-cream-500">{faNum(p.views)} بازدید</p></div></div>))}
+          <button onClick={() => setEditing({ id: '', title: '', category: '', tags: [], content: '', views: 0, date: new Date().toISOString(), color1: '#667eea', color2: '#764ba2', published: true, comments: 0 })} className="bg-brand-900 text-white px-4 py-2.5 rounded-xl text-[12px] font-bold flex items-center gap-1 shadow-lg shadow-brand-900/25"><IconPlus className="w-4 h-4" />پست جدید</button>
+          <div className="space-y-3">
+            {posts.map((p: any) => (
+              <div key={p.id} className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-4 hover:shadow-lg transition-all flex gap-4`}>
+                <div className="w-20 h-20 rounded-xl flex-shrink-0" style={{ background: `linear-gradient(135deg, ${p.color1 || '#667eea'}, ${p.color2 || '#764ba2'})` }} />
+                <div className="flex-1">
+                  <div className="flex items-center justify-between mb-1">
+                    <h4 className={`text-[13px] font-bold ${darkMode ? 'text-white' : 'text-brand-900'}`}>{p.title}</h4>
+                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${p.published ? 'bg-emerald-100 text-emerald-700' : 'bg-cream-100 text-cream-500'}`}>{p.published ? 'منتشر شده' : 'پیش‌نویس'}</span>
+                  </div>
+                  <p className="text-[10px] text-cream-500">{p.category} | {faNum(p.views || 0)} بازدید | {faNum(p.comments || 0)} نظر</p>
+                  <div className="flex gap-1 mt-2">
+                    {p.tags?.slice(0, 3).map((t: string) => <span key={t} className="text-[9px] bg-cream-100 text-brand-700 rounded-full px-2 py-0.5">{t}</span>)}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
+
+      {/* SEO Tab */}
+      {tab === 'seo' && (
+        <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
+          <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-4`}>ابزار سئو - بررسی وضعیت متا</h3>
+          <div className="space-y-2">
+            {pages.map((p: any) => (
+              <div key={p.id} className={`flex items-center justify-between p-3 rounded-xl ${darkMode ? 'bg-[#1a212c]' : 'bg-cream-50'}`}>
+                <div>
+                  <p className="text-[12px] font-bold">{p.title}</p>
+                  <p className="text-[10px] text-cream-500">/{p.slug}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {p.metaTitle ? (
+                    <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">متا تنظیم شده</span>
+                  ) : (
+                    <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-coral-100 text-coral-700">فاقد متا</span>
+                  )}
+                  <button onClick={() => setEditing(p)} className="p-1.5 rounded-lg hover:bg-cream-100"><IconEdit className="w-3.5 h-3.5 text-brand-600" /></button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 p-4 rounded-xl bg-brand-50 border border-brand-200">
+            <h4 className="text-[12px] font-bold text-brand-900 mb-2">پیش‌نمایش نتایج گوگل</h4>
+            <div className="bg-white rounded-lg p-3 border border-cream-200">
+              <p className="text-[13px] text-blue-700 font-bold">عنوان صفحه در نتایج گوگل نمایش داده می‌شود</p>
+              <p className="text-[11px] text-emerald-700">www.tasis.ir/page-slug</p>
+              <p className="text-[11px] text-cream-500 mt-1">توضیحات متا در این قسمت نمایش داده می‌شود. این متن باید جذاب و شامل کلمات کلیدی باشد.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Modal */}
       {editing && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setEditing(null)}>
           <div className={`w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-2xl ${darkMode ? 'bg-[#151b26]' : 'bg-white'} p-6 animate-rise`} onClick={e => e.stopPropagation()}>
-            <h3 className="font-bold mb-3">{editing.id ? 'ویرایش' : 'ایجاد'}</h3>
-            <div className="space-y-2">
-              <input value={editing.title || ''} onChange={e => setEditing({ ...editing, title: e.target.value })} placeholder="عنوان" className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" />
-              {editing.slug !== undefined && <input value={editing.slug || ''} onChange={e => setEditing({ ...editing, slug: e.target.value })} placeholder="نامک (slug)" className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" />}
-              <textarea value={editing.content || ''} onChange={e => setEditing({ ...editing, content: e.target.value })} placeholder="محتوا (مارک‌داون)" className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none h-32 resize-none" />
-              <input value={editing.metaTitle || ''} onChange={e => setEditing({ ...editing, metaTitle: e.target.value })} placeholder="متا تایتل" className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" />
-              <input value={editing.metaDesc || ''} onChange={e => setEditing({ ...editing, metaDesc: e.target.value })} placeholder="متا دیسکریپشن" className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" />
+            <h3 className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-4`}>{editing.id ? 'ویرایش' : 'ایجاد'} محتوا</h3>
+            <div className="space-y-3">
+              <div><label className="text-[11px] font-bold text-cream-500 mb-1 block">عنوان</label><input value={editing.title || ''} onChange={e => setEditing({ ...editing, title: e.target.value })} className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none focus:border-brand-400 focus:ring-4 focus:ring-brand-100" /></div>
+              {editing.slug !== undefined && <div><label className="text-[11px] font-bold text-cream-500 mb-1 block">نامک (slug)</label><input value={editing.slug || ''} onChange={e => setEditing({ ...editing, slug: e.target.value })} className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none font-mono" /></div>}
+              <div><label className="text-[11px] font-bold text-cream-500 mb-1 block">محتوا (مارک‌داون)</label><textarea value={editing.content || ''} onChange={e => setEditing({ ...editing, content: e.target.value })} className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none h-32 resize-none focus:border-brand-400 focus:ring-4 focus:ring-brand-100" /></div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><label className="text-[11px] font-bold text-cream-500 mb-1 block">متا تایتل</label><input value={editing.metaTitle || ''} onChange={e => setEditing({ ...editing, metaTitle: e.target.value })} className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" /></div>
+                <div><label className="text-[11px] font-bold text-cream-500 mb-1 block">کلمات کلیدی</label><input value={editing.keywords || ''} onChange={e => setEditing({ ...editing, keywords: e.target.value })} className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" /></div>
+              </div>
+              <div><label className="text-[11px] font-bold text-cream-500 mb-1 block">متا دیسکریپشن</label><textarea value={editing.metaDesc || ''} onChange={e => setEditing({ ...editing, metaDesc: e.target.value })} className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none h-16 resize-none" /></div>
             </div>
             <button onClick={() => {
               if (editing.id) {
@@ -2460,7 +3366,7 @@ function AdminContentManager() {
               }
               log(`${editing.id ? 'ویرایش' : 'ایجاد'} محتوا`, editing.title);
               setEditing(null);
-            }} className="w-full mt-3 bg-brand-900 text-white py-2 rounded-xl font-bold text-[12px]">ذخیره</button>
+            }} className="w-full mt-4 bg-brand-900 text-white py-2.5 rounded-xl font-bold text-[12px] shadow-lg shadow-brand-900/25">ذخیره</button>
           </div>
         </div>
       )}
@@ -2470,18 +3376,16 @@ function AdminContentManager() {
 
 function AdminVendors() {
   const { vendors, setVendors, darkMode, log } = useAdmin();
+  const [tab, setTab] = useState<'vendors' | 'performance' | 'settlements'>('vendors');
   
+  const totalSales = vendors.reduce((s: number, v: any) => s + v.totalSales, 0);
+  const totalBalance = vendors.reduce((s: number, v: any) => s + v.balance, 0);
+
   const exportVendors = () => {
     const data = vendors.map((v: any) => ({
-      'نام فروشنده': v.name,
-      'نام حقوقی': v.legalName,
-      'شبا': v.iban,
-      'تلفن': v.phone,
-      'فروش کل (تومان)': v.totalSales,
-      'تعداد سفارش': v.totalOrders,
-      'تعداد قلم': v.totalItems,
-      'بدهی جاری (تومان)': v.balance,
-      'وضعیت': v.active ? 'فعال' : 'غیرفعال'
+      'نام فروشنده': v.name, 'نام حقوقی': v.legalName, 'شبا': v.iban, 'تلفن': v.phone,
+      'فروش کل (تومان)': v.totalSales, 'تعداد سفارش': v.totalOrders, 'تعداد قلم': v.totalItems,
+      'بدهی جاری (تومان)': v.balance, 'وضعیت': v.active ? 'فعال' : 'غیرفعال'
     }));
     downloadFile(toExcel(data, 'گزارش فروشندگان'), 'vendors.xls', 'application/vnd.ms-excel');
     log('خروجی گزارش فروشندگان', 'vendors');
@@ -2489,31 +3393,247 @@ function AdminVendors() {
 
   return (
     <div className="space-y-4">
-      <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
-        <div className="flex justify-between items-center mb-3">
-          <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'}`}>فروشندگان</h3>
-          <button onClick={exportVendors} className="flex items-center gap-1 px-3 py-1.5 rounded-xl border border-cream-300 text-[11px] font-bold"><IconDownload className="w-3.5 h-3.5" />خروجی اکسل</button>
-        </div>
-        <table className="w-full text-[12px]"><thead><tr className={`border-y ${darkMode ? 'border-white/10 bg-white/5' : 'border-cream-300 bg-cream-100/70'}`}><th className="text-start py-2 px-2 font-bold text-cream-500">نام</th><th className="text-start py-2 px-2 font-bold text-cream-500">فروش کل</th><th className="text-start py-2 px-2 font-bold text-cream-500">بدهی</th><th className="text-start py-2 px-2 font-bold text-cream-500">وضعیت</th></tr></thead>
-          <tbody>{vendors.map((v: any) => (<tr key={v.id} className={`border-b ${darkMode ? 'border-white/5' : 'border-cream-100'}`}><td className="py-2 px-2 font-bold">{v.name}</td><td className="py-2 px-2 tnum">{formatPrice(v.totalSales)}</td><td className="py-2 px-2 tnum">{formatPrice(v.balance)}</td><td className="py-2 px-2"><button onClick={() => { setVendors(vendors.map((x: any) => x.id === v.id ? { ...x, active: !x.active } : x)); }} className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${v.active ? 'bg-emerald-100 text-emerald-700' : 'bg-cream-100 text-cream-500'}`}>{v.active ? 'فعال' : 'غیرفعال'}</button></td></tr>))}</tbody>
-        </table>
+      {/* KPI */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[
+          { l: 'کل فروشندگان', v: faNum(vendors.length), c: 'bg-blue-50 text-blue-700', icon: <IconStore className="w-5 h-5" /> },
+          { l: 'فروش کل', v: formatPrice(totalSales), c: 'bg-emerald-50 text-emerald-700', icon: <IconTrending className="w-5 h-5" /> },
+          { l: 'بدهی جاری', v: formatPrice(totalBalance), c: 'bg-amber-50 text-amber-700', icon: <IconDollar className="w-5 h-5" /> },
+          { l: 'فعال', v: faNum(vendors.filter((v: any) => v.active).length), c: 'bg-purple-50 text-purple-700', icon: <IconCheck className="w-5 h-5" /> },
+        ].map((k, i) => (
+          <div key={i} className={`rounded-xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-4`}>
+            <div className="flex items-center justify-between mb-2"><p className="text-[10px] text-cream-500">{k.l}</p><div className={k.c + ' p-1.5 rounded-lg'}>{k.icon}</div></div>
+            <p className={`text-lg font-extrabold tnum ${darkMode ? 'text-white' : 'text-brand-900'}`}>{k.v}</p>
+          </div>
+        ))}
       </div>
+
+      {/* Tabs */}
+      <div className="flex flex-wrap gap-2 border-b border-cream-300">
+        {[{ k: 'vendors', l: 'فروشندگان' }, { k: 'performance', l: 'عملکرد' }, { k: 'settlements', l: 'تسویه‌ها' }].map(t => (
+          <button key={t.k} onClick={() => setTab(t.k as any)} className={`pb-2 px-3 text-[12px] font-bold border-b-2 transition-colors ${tab === t.k ? 'border-brand-900 text-brand-900' : 'border-transparent text-cream-500 hover:text-brand-700'}`}>{t.l}</button>
+        ))}
+      </div>
+
+      {/* Vendors Tab */}
+      {tab === 'vendors' && (
+        <div className="space-y-3">
+          <div className="flex justify-between items-center">
+            <p className="text-[11px] text-cream-500">{faNum(vendors.length)} فروشنده</p>
+            <button onClick={exportVendors} className="flex items-center gap-1 px-3 py-1.5 rounded-xl border border-cream-300 text-[11px] font-bold"><IconDownload className="w-3.5 h-3.5" />خروجی اکسل</button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {vendors.map((v: any) => (
+              <div key={v.id} className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5 hover:shadow-lg transition-all`}>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-xl bg-brand-100 flex items-center justify-center">
+                      <IconStore className="w-6 h-6 text-brand-700" />
+                    </div>
+                    <div>
+                      <h4 className={`text-[13px] font-bold ${darkMode ? 'text-white' : 'text-brand-900'}`}>{v.name}</h4>
+                      <p className="text-[10px] text-cream-500">{v.legalName} | {v.phone}</p>
+                    </div>
+                  </div>
+                  <button onClick={() => { setVendors(vendors.map((x: any) => x.id === v.id ? { ...x, active: !x.active } : x)); log(`${v.active ? 'غیرفعال' : 'فعال'} کردن فروشنده ${v.name}`, v.id); }} className={`w-10 h-5 rounded-full relative transition-colors ${v.active ? 'bg-emerald-500' : 'bg-cream-300'}`}>
+                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${v.active ? 'right-0.5' : 'right-5'}`}></span>
+                  </button>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className={`rounded-lg ${darkMode ? 'bg-[#1a212c]' : 'bg-cream-50'} p-2`}>
+                    <p className="text-[10px] text-cream-500">فروش</p>
+                    <p className="tnum text-[11px] font-bold">{formatPrice(v.totalSales)}</p>
+                  </div>
+                  <div className={`rounded-lg ${darkMode ? 'bg-[#1a212c]' : 'bg-cream-50'} p-2`}>
+                    <p className="text-[10px] text-cream-500">سفارش</p>
+                    <p className="tnum text-[11px] font-bold">{faNum(v.totalOrders)}</p>
+                  </div>
+                  <div className={`rounded-lg ${darkMode ? 'bg-[#1a212c]' : 'bg-cream-50'} p-2`}>
+                    <p className="text-[10px] text-cream-500">بدهی</p>
+                    <p className="tnum text-[11px] font-bold text-amber-700">{formatPrice(v.balance)}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Performance Tab */}
+      {tab === 'performance' && (
+        <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
+          <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-4`}>مقایسه عملکرد فروشندگان</h3>
+          <div className="space-y-4">
+            {vendors.map((v: any) => {
+              const maxSales = Math.max(...vendors.map((x: any) => x.totalSales));
+              const percentage = maxSales > 0 ? (v.totalSales / maxSales) * 100 : 0;
+              return (
+                <div key={v.id}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[12px] font-bold">{v.name}</span>
+                    <span className="tnum text-[12px] font-bold">{formatPrice(v.totalSales)}</span>
+                  </div>
+                  <div className="h-3 bg-cream-200 rounded-full overflow-hidden">
+                    <div className="h-full bg-brand-900 rounded-full transition-all" style={{ width: `${percentage}%` }}></div>
+                  </div>
+                  <div className="flex justify-between text-[10px] text-cream-500 mt-1">
+                    <span>{faNum(v.totalOrders)} سفارش | {faNum(v.totalItems)} قلم</span>
+                    <span>کارمزد: {faNum(v.fee)}٪</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Settlements Tab */}
+      {tab === 'settlements' && (
+        <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
+          <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-4`}>درخواست تسویه</h3>
+          <div className="space-y-3">
+            {vendors.filter((v: any) => v.balance > 0).map((v: any) => (
+              <div key={v.id} className={`rounded-xl border ${darkMode ? 'border-white/10 bg-[#1a212c]' : 'border-cream-200 bg-cream-50'} p-4 flex items-center justify-between`}>
+                <div>
+                  <p className="text-[12px] font-bold">{v.name}</p>
+                  <p className="text-[10px] text-cream-500 mt-1">شبا: {v.iban}</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="tnum text-[13px] font-extrabold text-amber-700">{formatPrice(v.balance)} تومان</span>
+                  <button onClick={() => { setVendors(vendors.map((x: any) => x.id === v.id ? { ...x, balance: 0 } : x)); log(`تسویه با فروشنده ${v.name}`, v.id); }} className="px-3 py-1.5 rounded-xl bg-brand-900 text-white text-[11px] font-bold">تسویه</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 function AdminLogistics() {
   const { carriers, setCarriers, orders, darkMode, log } = useAdmin();
+  const [tab, setTab] = useState<'carriers' | 'shipments' | 'tracking'>('carriers');
+  
+  const shippedOrders = orders.filter((o: any) => o.status === 'shipped' || o.status === 'processing');
+  const pendingShipment = orders.filter((o: any) => o.status === 'delivered' || o.status === 'processing').length;
+
   return (
     <div className="space-y-4">
-      <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
-        <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-3`}>حامل‌های ارسال</h3>
-        <div className="space-y-2">{carriers.map((c: any) => (<div key={c.id} className={`rounded-xl border ${darkMode ? 'border-white/10' : 'border-cream-200'} p-3 flex items-center justify-between`}><div><p className="text-[12px] font-bold">{c.name}</p><p className="text-[10px] text-cream-500">هزینه: {formatPrice(c.baseCost)} | {c.deliveryDays}</p></div><button onClick={() => { setCarriers(carriers.map((x: any) => x.id === c.id ? { ...x, active: !x.active } : x)); }} className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${c.active ? 'bg-emerald-100 text-emerald-700' : 'bg-cream-100 text-cream-500'}`}>{c.active ? 'فعال' : 'غیرفعال'}</button></div>))}</div>
+      {/* KPI */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[
+          { l: 'حامل‌های فعال', v: faNum(carriers.filter((c: any) => c.active).length), c: 'bg-blue-50 text-blue-700', icon: <IconTruck className="w-5 h-5" /> },
+          { l: 'در حال ارسال', v: faNum(shippedOrders.length), c: 'bg-amber-50 text-amber-700', icon: <IconPackage className="w-5 h-5" /> },
+          { l: 'تحویل شده', v: faNum(orders.filter((o: any) => o.status === 'delivered').length), c: 'bg-emerald-50 text-emerald-700', icon: <IconCheck className="w-5 h-5" /> },
+          { l: 'آماده بسته‌بندی', v: faNum(pendingShipment), c: 'bg-purple-50 text-purple-700', icon: <IconBox className="w-5 h-5" /> },
+        ].map((k, i) => (
+          <div key={i} className={`rounded-xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-4`}>
+            <div className="flex items-center justify-between mb-2"><p className="text-[10px] text-cream-500">{k.l}</p><div className={k.c + ' p-1.5 rounded-lg'}>{k.icon}</div></div>
+            <p className={`text-lg font-extrabold tnum ${darkMode ? 'text-white' : 'text-brand-900'}`}>{k.v}</p>
+          </div>
+        ))}
       </div>
-      <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
-        <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-3`}>مرکز کنترل مرسولات</h3>
-        <div className="space-y-2">{orders.filter((o: any) => o.status === 'processing' || o.status === 'shipped').slice(0, 10).map((o: any) => (<div key={o.id} className={`rounded-xl border ${darkMode ? 'border-white/10' : 'border-cream-200'} p-3 flex items-center justify-between`}><div><p className="text-[12px] font-bold">{o.code} - {o.customer}</p><p className="text-[10px] text-cream-500">{o.city}</p></div><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${o.status === 'shipped' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>{o.status === 'shipped' ? 'ارسال شده' : 'آماده ارسال'}</span></div>))}</div>
+
+      {/* Tabs */}
+      <div className="flex flex-wrap gap-2 border-b border-cream-300">
+        {[{ k: 'carriers', l: 'حامل‌های ارسال' }, { k: 'shipments', l: 'مرکز مرسولات' }, { k: 'tracking', l: 'رهگیری' }].map(t => (
+          <button key={t.k} onClick={() => setTab(t.k as any)} className={`pb-2 px-3 text-[12px] font-bold border-b-2 transition-colors ${tab === t.k ? 'border-brand-900 text-brand-900' : 'border-transparent text-cream-500 hover:text-brand-700'}`}>{t.l}</button>
+        ))}
       </div>
+
+      {/* Carriers */}
+      {tab === 'carriers' && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {carriers.map((c: any) => (
+            <div key={c.id} className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5 hover:shadow-lg transition-all`}>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${c.active ? 'bg-emerald-100 text-emerald-700' : 'bg-cream-100 text-cream-500'}`}>
+                    <IconTruck className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className={`text-[13px] font-bold ${darkMode ? 'text-white' : 'text-brand-900'}`}>{c.name}</h4>
+                    <p className="text-[10px] text-cream-500">{c.deliveryDays}</p>
+                  </div>
+                </div>
+                <button onClick={() => { setCarriers(carriers.map((x: any) => x.id === c.id ? { ...x, active: !x.active } : x)); log(`${c.active ? 'غیرفعال' : 'فعال'} کردن حامل ${c.name}`, c.id); }} className={`w-10 h-5 rounded-full relative transition-colors ${c.active ? 'bg-emerald-500' : 'bg-cream-300'}`}>
+                  <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${c.active ? 'right-0.5' : 'right-5'}`}></span>
+                </button>
+              </div>
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-cream-500">هزینه پایه:</span>
+                <span className="tnum font-bold">{formatPrice(c.baseCost)} تومان</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Shipments */}
+      {tab === 'shipments' && (
+        <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} overflow-hidden`}>
+          <div className="overflow-x-auto">
+            <table className="w-full text-[12px]">
+              <thead><tr className={`border-y ${darkMode ? 'border-white/10 bg-white/5' : 'border-cream-300 bg-cream-100/70'}`}>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">کد سفارش</th>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">مشتری</th>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">شهر</th>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">حامل</th>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">وضعیت</th>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">عملیات</th>
+              </tr></thead>
+              <tbody>
+                {orders.filter((o: any) => o.status !== 'cancelled' && o.status !== 'pending').slice(0, 15).map((o: any) => (
+                  <tr key={o.id} className={`border-b ${darkMode ? 'border-white/5 hover:bg-white/5' : 'border-cream-100 hover:bg-brand-50/40'}`}>
+                    <td className="py-2.5 px-3 font-bold">{o.code}</td>
+                    <td className="py-2.5 px-3">{o.customer}</td>
+                    <td className="py-2.5 px-3">{o.city}</td>
+                    <td className="py-2.5 px-3 text-[11px]">{carriers[0]?.name || '-'}</td>
+                    <td className="py-2.5 px-3">
+                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${o.status === 'delivered' ? 'bg-emerald-100 text-emerald-700' : o.status === 'shipped' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
+                        {o.status === 'delivered' ? 'تحویل شده' : o.status === 'shipped' ? 'ارسال شده' : 'بسته‌بندی'}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3">
+                      <button className="p-1.5 rounded-lg hover:bg-cream-100 text-brand-600" title="چاپ برچسب"><IconPrint className="w-4 h-4" /></button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Tracking */}
+      {tab === 'tracking' && (
+        <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
+          <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-4`}>رهگیری مرسولات</h3>
+          <div className="flex gap-2 mb-4">
+            <input placeholder="کد رهگیری یا شماره سفارش..." className="flex-1 rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" />
+            <button className="bg-brand-900 text-white px-4 py-2 rounded-xl text-[12px] font-bold">رهگیری</button>
+          </div>
+          <div className="space-y-3">
+            {orders.filter((o: any) => o.status === 'shipped').slice(0, 5).map((o: any) => (
+              <div key={o.id} className={`rounded-xl border ${darkMode ? 'border-white/10 bg-[#1a212c]' : 'border-cream-200 bg-cream-50'} p-4`}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[12px] font-bold">{o.code} - {o.customer}</span>
+                  <span className="text-[10px] text-cream-500">{o.city}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {['بسته‌بندی', 'تحویل به پست', 'در مسیر', 'تحویل'].map((step, i) => (
+                    <React.Fragment key={step}>
+                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold ${i <= 1 ? 'bg-brand-900 text-white' : 'bg-cream-200 text-cream-500'}`}>{faNum(i + 1)}</div>
+                      {i < 3 && <div className={`flex-1 h-0.5 ${i < 1 ? 'bg-brand-900' : 'bg-cream-200'}`}></div>}
+                    </React.Fragment>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
