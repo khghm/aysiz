@@ -1056,7 +1056,20 @@ function AdminHome() {
               <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? '#242e3b' : '#E8E1CC'} />
               <XAxis dataKey="day" tick={{ fontSize: 10, fontFamily: 'Vazirmatn' }} stroke={darkMode ? '#8da5cc' : '#B8A97E'} />
               <YAxis tick={{ fontSize: 10, fontFamily: 'Vazirmatn' }} stroke={darkMode ? '#8da5cc' : '#B8A97E'} />
-              <Tooltip contentStyle={{ background: '#0D1221', border: 'none', borderRadius: 12, color: '#fff', fontSize: 11 }} />
+              <Tooltip 
+                contentStyle={{ 
+                  background: 'linear-gradient(135deg, #0D1221 0%, #1A2238 100%)',
+                  border: '1px solid rgba(255,255,255,0.15)',
+                  borderRadius: 16,
+                  padding: '12px 16px',
+                  color: '#fff',
+                  fontSize: 13,
+                  fontWeight: 'bold',
+                  fontFamily: 'Vazirmatn',
+                  boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
+                  direction: 'rtl'
+                }}
+              />
               <Area type="monotone" dataKey="revenue" stroke="#1A2238" fill="url(#colorRev)" strokeWidth={2} />
             </AreaChart>
           </ResponsiveContainer>
@@ -1570,7 +1583,22 @@ function AdminReports() {
             <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? '#242e3b' : '#E8E1CC'} />
             <XAxis dataKey="day" tick={{ fontSize: 10, fontFamily: 'Vazirmatn' }} stroke={darkMode ? '#8da5cc' : '#B8A97E'} />
             <YAxis tick={{ fontSize: 10, fontFamily: 'Vazirmatn' }} stroke={darkMode ? '#8da5cc' : '#B8A97E'} tickFormatter={(v) => formatPrice(v / 1000000) + 'M'} />
-            <Tooltip contentStyle={{ background: '#0D1221', border: 'none', borderRadius: 12, color: '#fff', fontSize: 11, fontFamily: 'Vazirmatn' }} formatter={(v: any) => formatPrice(v) + ' تومان'} />
+            <Tooltip 
+              contentStyle={{ 
+                background: 'linear-gradient(135deg, #0D1221 0%, #1A2238 100%)',
+                border: '1px solid rgba(255,255,255,0.15)',
+                borderRadius: 16,
+                padding: '12px 16px',
+                color: '#fff',
+                fontSize: 13,
+                fontWeight: 'bold',
+                fontFamily: 'Vazirmatn',
+                boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
+                direction: 'rtl'
+              }}
+              formatter={(v: any) => [formatPrice(v) + ' تومان', '']}
+              labelStyle={{ color: '#F5C518', fontWeight: 'bold', marginBottom: 8 }}
+            />
             <Area type="monotone" dataKey="revenue" fill="url(#colorRevenue)" stroke="#1A2238" strokeWidth={2} name="درآمد" />
             <Line type="monotone" dataKey="profit" stroke="#F5C518" strokeWidth={3} dot={{ fill: '#F5C518', r: 3 }} name="سود" />
           </ComposedChart>
@@ -1589,37 +1617,133 @@ function AdminReports() {
                   <Pie data={channels} dataKey="revenue" nameKey="name" cx="50%" cy="50%" outerRadius={60} label={false}>
                     {channels.map((_, i) => <Cell key={i} fill={channelColors[i % channelColors.length]} />)}
                   </Pie>
-                  <Tooltip contentStyle={{ background: '#0D1221', border: 'none', borderRadius: 12, color: '#fff', fontSize: 11 }} formatter={(v: any) => formatPrice(v)} />
+                  <Tooltip 
+                    contentStyle={{ 
+                      background: 'linear-gradient(135deg, #0D1221 0%, #1A2238 100%)',
+                      border: '1px solid rgba(255,255,255,0.15)',
+                      borderRadius: 16,
+                      padding: '12px 16px',
+                      color: '#fff',
+                      fontSize: 13,
+                      fontWeight: 'bold',
+                      fontFamily: 'Vazirmatn',
+                      boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
+                      direction: 'rtl'
+                    }}
+                    formatter={(v: any, name: any, props: any) => [formatPrice(v) + ' تومان', props.payload.name]}
+                  />
                 </PieChart>
               </ResponsiveContainer>
             </div>
-            <div className="space-y-2">
-              {channels.map((ch, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded" style={{ background: channelColors[i % channelColors.length] }}></div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[11px] font-bold truncate">{ch.name}</p>
-                    <p className="text-[9px] text-cream-500 tnum">{faNum(ch.orders)} سفارش</p>
+            <div className="space-y-3">
+              {channels.map((ch, i) => {
+                const totalRevenue = channels.reduce((s, c) => s + c.revenue, 0);
+                const percentage = totalRevenue > 0 ? ((ch.revenue / totalRevenue) * 100).toFixed(1) : '0';
+                const aov = ch.orders > 0 ? ch.revenue / ch.orders : 0;
+                return (
+                  <div key={i} className={`rounded-xl p-3 ${darkMode ? 'bg-[#1a212c]' : 'bg-cream-50'} hover:shadow-md transition-all`}>
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: channelColors[i % channelColors.length] }}>
+                        <span className="text-white font-bold text-sm">{faNum(i + 1)}</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="text-[12px] font-bold truncate">{ch.name}</p>
+                          <span className="tnum text-[11px] font-extrabold" style={{ color: channelColors[i % channelColors.length] }}>{faNum(percentage)}٪</span>
+                        </div>
+                        <div className="flex items-center justify-between text-[10px] text-cream-500">
+                          <span className="tnum">{faNum(ch.orders)} سفارش</span>
+                          <span className="tnum">AOV: {formatPrice(aov)}</span>
+                        </div>
+                        <div className="mt-1.5 h-1.5 bg-cream-200 rounded-full overflow-hidden">
+                          <div className="h-full rounded-full transition-all" style={{ width: `${percentage}%`, background: channelColors[i % channelColors.length] }}></div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <span className="tnum text-[10px] font-bold text-brand-700">{formatPrice(ch.revenue)}</span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
 
         {/* Order Status Distribution */}
         <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
-          <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-4`}>توزیع وضعیت سفارش‌ها</h3>
-          <div className="h-48">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={statusDistribution} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={40} outerRadius={70} paddingAngle={2} label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}٪)`}>
-                  {statusDistribution.map((entry, i) => <Cell key={i} fill={entry.color} />)}
-                </Pie>
-                <Tooltip contentStyle={{ background: '#0D1221', border: 'none', borderRadius: 12, color: '#fff', fontSize: 11 }} formatter={(v: any) => faNum(v) + ' سفارش'} />
-              </PieChart>
-            </ResponsiveContainer>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'}`}>توزیع وضعیت سفارش‌ها</h3>
+              <p className="text-[10px] text-cream-500 mt-0.5">مجموع: {faNum(orders.length)} سفارش</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="h-56">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <defs>
+                    {statusDistribution.map((entry, i) => (
+                      <linearGradient key={i} id={`gradient-${i}`} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={entry.color} stopOpacity={1}/>
+                        <stop offset="100%" stopColor={entry.color} stopOpacity={0.7}/>
+                      </linearGradient>
+                    ))}
+                  </defs>
+                  <Pie 
+                    data={statusDistribution} 
+                    dataKey="value" 
+                    nameKey="name" 
+                    cx="50%" 
+                    cy="50%" 
+                    innerRadius={50} 
+                    outerRadius={80} 
+                    paddingAngle={3}
+                    label={({ percent }) => `${(percent * 100).toFixed(0)}٪`}
+                    labelLine={false}
+                  >
+                    {statusDistribution.map((entry, i) => <Cell key={i} fill={`url(#gradient-${i})`} stroke={entry.color} strokeWidth={2} />)}
+                  </Pie>
+                  <Tooltip 
+                    contentStyle={{ 
+                      background: 'linear-gradient(135deg, #0D1221 0%, #1A2238 100%)',
+                      border: '1px solid rgba(255,255,255,0.15)',
+                      borderRadius: 16,
+                      padding: '12px 16px',
+                      color: '#fff',
+                      fontSize: 13,
+                      fontWeight: 'bold',
+                      fontFamily: 'Vazirmatn',
+                      boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
+                      direction: 'rtl'
+                    }}
+                    formatter={(v: any, name: any) => [faNum(v) + ' سفارش', name]}
+                  />
+                  <text x="50%" y="50%" textAnchor="middle" dominantBaseline="middle" className="fill-brand-900 dark:fill-white" style={{ fontSize: '24px', fontWeight: 'bold' }}>
+                    {faNum(orders.length)}
+                  </text>
+                  <text x="50%" y="50%" dy="20" textAnchor="middle" className="fill-cream-500" style={{ fontSize: '10px' }}>
+                    سفارش
+                  </text>
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="space-y-2">
+              {statusDistribution.map((status, i) => {
+                const percentage = orders.length > 0 ? ((status.value / orders.length) * 100).toFixed(1) : '0';
+                return (
+                  <div key={i} className={`rounded-xl p-2.5 ${darkMode ? 'bg-[#1a212c]' : 'bg-cream-50'} hover:shadow-md transition-all`}>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: status.color }}></div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[11px] font-bold truncate">{status.name}</p>
+                      </div>
+                      <div className="text-left">
+                        <p className="tnum text-[12px] font-extrabold" style={{ color: status.color }}>{faNum(status.value)}</p>
+                        <p className="tnum text-[9px] text-cream-500">{faNum(percentage)}٪</p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>
@@ -1735,7 +1859,20 @@ function AdminReports() {
             <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? '#242e3b' : '#E8E1CC'} />
             <XAxis dataKey="day" tick={{ fontSize: 10, fontFamily: 'Vazirmatn' }} stroke={darkMode ? '#8da5cc' : '#B8A97E'} />
             <YAxis tick={{ fontSize: 10, fontFamily: 'Vazirmatn' }} stroke={darkMode ? '#8da5cc' : '#B8A97E'} />
-            <Tooltip contentStyle={{ background: '#0D1221', border: 'none', borderRadius: 12, color: '#fff', fontSize: 11, fontFamily: 'Vazirmatn' }} />
+            <Tooltip 
+              contentStyle={{ 
+                background: 'linear-gradient(135deg, #0D1221 0%, #1A2238 100%)',
+                border: '1px solid rgba(255,255,255,0.15)',
+                borderRadius: 16,
+                padding: '12px 16px',
+                color: '#fff',
+                fontSize: 13,
+                fontWeight: 'bold',
+                fontFamily: 'Vazirmatn',
+                boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
+                direction: 'rtl'
+              }}
+            />
             <Bar dataKey="orders" fill="#1A2238" radius={[8, 8, 0, 0]} name="تعداد سفارش" />
           </BarChart>
         </ResponsiveContainer>
@@ -2970,7 +3107,21 @@ function AdminOperations() {
               <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? '#242e3b' : '#E8E1CC'} />
               <XAxis dataKey="day" tick={{ fontSize: 10, fontFamily: 'Vazirmatn' }} stroke={darkMode ? '#8da5cc' : '#B8A97E'} />
               <YAxis tick={{ fontSize: 10, fontFamily: 'Vazirmatn' }} stroke={darkMode ? '#8da5cc' : '#B8A97E'} tickFormatter={(v) => formatPrice(v / 1000000) + 'M'} />
-              <Tooltip contentStyle={{ background: '#0D1221', border: 'none', borderRadius: 12, color: '#fff', fontSize: 11 }} formatter={(v: any) => formatPrice(v) + ' تومان'} />
+              <Tooltip 
+                contentStyle={{ 
+                  background: 'linear-gradient(135deg, #0D1221 0%, #1A2238 100%)',
+                  border: '1px solid rgba(255,255,255,0.15)',
+                  borderRadius: 16,
+                  padding: '12px 16px',
+                  color: '#fff',
+                  fontSize: 13,
+                  fontWeight: 'bold',
+                  fontFamily: 'Vazirmatn',
+                  boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
+                  direction: 'rtl'
+                }}
+                formatter={(v: any) => [formatPrice(v) + ' تومان', '']}
+              />
               <defs>
                 <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#F5C518" stopOpacity={0.8}/>
