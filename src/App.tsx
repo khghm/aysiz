@@ -1058,17 +1058,19 @@ function AdminHome() {
               <YAxis tick={{ fontSize: 10, fontFamily: 'Vazirmatn' }} stroke={darkMode ? '#8da5cc' : '#B8A97E'} />
               <Tooltip 
                 contentStyle={{ 
-                  background: 'linear-gradient(135deg, #0D1221 0%, #1A2238 100%)',
-                  border: '1px solid rgba(255,255,255,0.15)',
-                  borderRadius: 16,
-                  padding: '12px 16px',
-                  color: '#fff',
-                  fontSize: 13,
-                  fontWeight: 'bold',
+                  background: '#1A2238',
+                  border: '2px solid #F5C518',
+                  borderRadius: 12,
+                  padding: '10px 14px',
+                  color: '#ffffff',
+                  fontSize: 12,
+                  fontWeight: '600',
                   fontFamily: 'Vazirmatn',
-                  boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
+                  boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
                   direction: 'rtl'
                 }}
+                itemStyle={{ color: '#ffffff' }}
+                labelStyle={{ color: '#F5C518', fontWeight: 'bold', marginBottom: '6px' }}
               />
               <Area type="monotone" dataKey="revenue" stroke="#1A2238" fill="url(#colorRev)" strokeWidth={2} />
             </AreaChart>
@@ -1585,19 +1587,20 @@ function AdminReports() {
             <YAxis tick={{ fontSize: 10, fontFamily: 'Vazirmatn' }} stroke={darkMode ? '#8da5cc' : '#B8A97E'} tickFormatter={(v) => formatPrice(v / 1000000) + 'M'} />
             <Tooltip 
               contentStyle={{ 
-                background: 'linear-gradient(135deg, #0D1221 0%, #1A2238 100%)',
-                border: '1px solid rgba(255,255,255,0.15)',
-                borderRadius: 16,
-                padding: '12px 16px',
-                color: '#fff',
-                fontSize: 13,
-                fontWeight: 'bold',
+                background: '#1A2238',
+                border: '2px solid #F5C518',
+                borderRadius: 12,
+                padding: '10px 14px',
+                color: '#ffffff',
+                fontSize: 12,
+                fontWeight: '600',
                 fontFamily: 'Vazirmatn',
-                boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
                 direction: 'rtl'
               }}
-              formatter={(v: any) => [formatPrice(v) + ' تومان', '']}
-              labelStyle={{ color: '#F5C518', fontWeight: 'bold', marginBottom: 8 }}
+              itemStyle={{ color: '#ffffff' }}
+              labelStyle={{ color: '#F5C518', fontWeight: 'bold', marginBottom: '6px' }}
+              formatter={(value: any) => [formatPrice(value) + ' تومان', '']}
             />
             <Area type="monotone" dataKey="revenue" fill="url(#colorRevenue)" stroke="#1A2238" strokeWidth={2} name="درآمد" />
             <Line type="monotone" dataKey="profit" stroke="#F5C518" strokeWidth={3} dot={{ fill: '#F5C518', r: 3 }} name="سود" />
@@ -1619,18 +1622,22 @@ function AdminReports() {
                   </Pie>
                   <Tooltip 
                     contentStyle={{ 
-                      background: 'linear-gradient(135deg, #0D1221 0%, #1A2238 100%)',
-                      border: '1px solid rgba(255,255,255,0.15)',
-                      borderRadius: 16,
-                      padding: '12px 16px',
-                      color: '#fff',
-                      fontSize: 13,
-                      fontWeight: 'bold',
+                      background: '#1A2238',
+                      border: '2px solid #F5C518',
+                      borderRadius: 12,
+                      padding: '10px 14px',
+                      color: '#ffffff',
+                      fontSize: 12,
+                      fontWeight: '600',
                       fontFamily: 'Vazirmatn',
-                      boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
+                      boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
                       direction: 'rtl'
                     }}
-                    formatter={(v: any, name: any, props: any) => [formatPrice(v) + ' تومان', props.payload.name]}
+                    itemStyle={{ color: '#ffffff' }}
+                    labelStyle={{ color: '#F5C518', fontWeight: 'bold', marginBottom: '6px' }}
+                    formatter={(value: any, name: any, props: any) => {
+                      return [formatPrice(value) + ' تومان', props.payload.name];
+                    }}
                   />
                 </PieChart>
               </ResponsiveContainer>
@@ -1703,18 +1710,22 @@ function AdminReports() {
                   </Pie>
                   <Tooltip 
                     contentStyle={{ 
-                      background: 'linear-gradient(135deg, #0D1221 0%, #1A2238 100%)',
-                      border: '1px solid rgba(255,255,255,0.15)',
-                      borderRadius: 16,
-                      padding: '12px 16px',
-                      color: '#fff',
-                      fontSize: 13,
-                      fontWeight: 'bold',
+                      background: '#1A2238',
+                      border: '2px solid #F5C518',
+                      borderRadius: 12,
+                      padding: '10px 14px',
+                      color: '#ffffff',
+                      fontSize: 12,
+                      fontWeight: '600',
                       fontFamily: 'Vazirmatn',
-                      boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
+                      boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
                       direction: 'rtl'
                     }}
-                    formatter={(v: any, name: any) => [faNum(v) + ' سفارش', name]}
+                    itemStyle={{ color: '#ffffff' }}
+                    labelStyle={{ color: '#F5C518', fontWeight: 'bold', marginBottom: '6px' }}
+                    formatter={(value: any, name: any) => {
+                      return [faNum(value) + ' سفارش', name];
+                    }}
                   />
                   <text x="50%" y="50%" textAnchor="middle" dominantBaseline="middle" className="fill-brand-900 dark:fill-white" style={{ fontSize: '24px', fontWeight: 'bold' }}>
                     {faNum(orders.length)}
@@ -1861,17 +1872,19 @@ function AdminReports() {
             <YAxis tick={{ fontSize: 10, fontFamily: 'Vazirmatn' }} stroke={darkMode ? '#8da5cc' : '#B8A97E'} />
             <Tooltip 
               contentStyle={{ 
-                background: 'linear-gradient(135deg, #0D1221 0%, #1A2238 100%)',
-                border: '1px solid rgba(255,255,255,0.15)',
-                borderRadius: 16,
-                padding: '12px 16px',
-                color: '#fff',
-                fontSize: 13,
-                fontWeight: 'bold',
+                background: '#1A2238',
+                border: '2px solid #F5C518',
+                borderRadius: 12,
+                padding: '10px 14px',
+                color: '#ffffff',
+                fontSize: 12,
+                fontWeight: '600',
                 fontFamily: 'Vazirmatn',
-                boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
                 direction: 'rtl'
               }}
+              itemStyle={{ color: '#ffffff' }}
+              labelStyle={{ color: '#F5C518', fontWeight: 'bold', marginBottom: '6px' }}
             />
             <Bar dataKey="orders" fill="#1A2238" radius={[8, 8, 0, 0]} name="تعداد سفارش" />
           </BarChart>
@@ -2258,15 +2271,15 @@ function AdminFinance() {
   };
 
   const tooltipStyle = { 
-    background: 'linear-gradient(135deg, #0D1221 0%, #1A2238 100%)',
-    border: '1px solid rgba(255,255,255,0.15)',
-    borderRadius: 16,
-    padding: '12px 16px',
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: 'bold',
+    background: '#1A2238',
+    border: '2px solid #F5C518',
+    borderRadius: 12,
+    padding: '10px 14px',
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '600',
     fontFamily: 'Vazirmatn',
-    boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
+    boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
     direction: 'rtl'
   };
 
@@ -3523,18 +3536,20 @@ function AdminOperations() {
               <YAxis tick={{ fontSize: 10, fontFamily: 'Vazirmatn' }} stroke={darkMode ? '#8da5cc' : '#B8A97E'} tickFormatter={(v) => formatPrice(v / 1000000) + 'M'} />
               <Tooltip 
                 contentStyle={{ 
-                  background: 'linear-gradient(135deg, #0D1221 0%, #1A2238 100%)',
-                  border: '1px solid rgba(255,255,255,0.15)',
-                  borderRadius: 16,
-                  padding: '12px 16px',
-                  color: '#fff',
-                  fontSize: 13,
-                  fontWeight: 'bold',
+                  background: '#1A2238',
+                  border: '2px solid #F5C518',
+                  borderRadius: 12,
+                  padding: '10px 14px',
+                  color: '#ffffff',
+                  fontSize: 12,
+                  fontWeight: '600',
                   fontFamily: 'Vazirmatn',
-                  boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
+                  boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
                   direction: 'rtl'
                 }}
-                formatter={(v: any) => [formatPrice(v) + ' تومان', '']}
+                itemStyle={{ color: '#ffffff' }}
+                labelStyle={{ color: '#F5C518', fontWeight: 'bold', marginBottom: '6px' }}
+                formatter={(value: any) => [formatPrice(value) + ' تومان', '']}
               />
               <defs>
                 <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
