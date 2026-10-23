@@ -56,18 +56,18 @@ export const brands = [
 ];
 
 const productImages = [
-  'https://image.qwenlm.ai/generated-images/6017aa05-0a98-4a62-b861-3fe4a9689232/_result.png',
-  'https://image.qwenlm.ai/generated-images/7cc10ed9-190e-4ab3-9c5c-718ad4e4ba76/_result.png',
-  'https://image.qwenlm.ai/generated-images/0af82278-b5f2-4868-9db8-7fe2a97e48b8/_result.png',
-  'https://image.qwenlm.ai/generated-images/19154d2e-fac6-4300-9fd0-a42c3f3d1e13/_result.png',
-  'https://image.qwenlm.ai/generated-images/9c113576-0611-41dc-afff-b1a1eacad01a/_result.png',
-  'https://image.qwenlm.ai/generated-images/cb23bb5b-a483-4cf0-bbb9-cecfe0ebe365/_result.png',
-  'https://image.qwenlm.ai/generated-images/76cd9c54-f3c6-4224-9dfd-b64207cb7119/_result.png',
-  'https://image.qwenlm.ai/generated-images/01c6a3ea-15d6-40f9-8a8c-9e7f4bb722ae/_result.png',
-  'https://image.qwenlm.ai/generated-images/ce4c2c9f-2bbc-4808-b9bb-c9a55ddcd000/_result.png',
-  'https://image.qwenlm.ai/generated-images/c0898fb0-72d4-4341-9cf6-fc2d1bfc9349/_result.png',
-  'https://image.qwenlm.ai/generated-images/9c113576-0611-41dc-afff-b1a1eacad01a/_result.png',
-  'https://image.qwenlm.ai/generated-images/01c6a3ea-15d6-40f9-8a8c-9e7f4bb722ae/_result.png',
+  'https://image.qwenlm.ai/generated-images/ecd385e4-7010-4275-ab83-9c81f7b6d962/_result.png',
+  'https://image.qwenlm.ai/generated-images/d33a122f-1bab-45c9-8cc6-65f62cf9ee96/_result.png',
+  'https://image.qwenlm.ai/generated-images/bf09b6f6-66d6-40d5-bd7d-0354150d5aea/_result.png',
+  'https://image.qwenlm.ai/generated-images/20fe0905-18f6-4328-a266-386a6e3ace17/_result.png',
+  'https://image.qwenlm.ai/generated-images/9d05c93a-1788-41e1-ac1c-0c099f3ccae6/_result.png',
+  'https://image.qwenlm.ai/generated-images/2ab539bc-1f75-4483-b3e5-4aec72efc844/_result.png',
+  'https://image.qwenlm.ai/generated-images/f1cb6d5e-3a1a-4af5-82fd-1c7751b7b94a/_result.png',
+  'https://image.qwenlm.ai/generated-images/ae7591e5-31a4-49de-8c3a-9eec171fc232/_result.png',
+  'https://image.qwenlm.ai/generated-images/0e950246-2e50-4398-bf4d-ae48e21809ea/_result.png',
+  'https://image.qwenlm.ai/generated-images/4c77f4f1-7bc5-47dd-b532-ced1ea7c7e32/_result.png',
+  'https://image.qwenlm.ai/generated-images/0e950246-2e50-4398-bf4d-ae48e21809ea/_result.png',
+  'https://image.qwenlm.ai/generated-images/ae7591e5-31a4-49de-8c3a-9eec171fc232/_result.png',
 ];
 
 const gradients = [

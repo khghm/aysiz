@@ -236,6 +236,53 @@ function HomeView() {
         </div>
       </section>
 
+      {/* Brand Strip */}
+      <section className="py-8 bg-white border-y border-cream-200">
+        <div className="max-w-7xl mx-auto px-4">
+          <h2 className="font-display text-lg text-brand-900 mb-4 text-center">برندهای محبوب</h2>
+          <div className="overflow-hidden relative">
+            <div className="flex animate-marquee gap-8">
+              {[...brands, ...brands].map((b, i) => (
+                <div key={i} className="flex-shrink-0 px-6 py-3 rounded-xl border border-cream-200 bg-cream-50 hover:border-brand-300 hover:shadow-md transition-all cursor-pointer">
+                  <span className="text-[12px] font-bold text-brand-800 whitespace-nowrap">{b}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* BookShelf - Horizontal Scroll */}
+      <section className="max-w-7xl mx-auto px-4 py-8">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-display text-xl text-brand-900">پیشنهاد ویژه تاسیز</h2>
+          <button onClick={() => setView('shop')} className="text-[12px] font-bold text-brand-600 hover:text-brand-900 flex items-center gap-1">مشاهده همه <IconChevronLeft className="w-4 h-4" /></button>
+        </div>
+        <div className="shelf flex gap-4 pb-4">
+          {active.filter(p => p.discount > 15).map(p => (
+            <div key={p.id} className="shelf-item flex-shrink-0 w-48">
+              <ProductCard product={p} />
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Promo Banners */}
+      <section className="max-w-7xl mx-auto px-4 py-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="rounded-2xl p-6 bg-gradient-to-l from-brand-900 to-brand-700 text-white cursor-pointer hover:shadow-xl transition-all" onClick={() => setView('shop')}>
+            <h3 className="font-display text-lg mb-1">لباس زیر راحتی</h3>
+            <p className="text-[11px] text-brand-200 mb-3">مجموعه جدید با جنس نخ پنبه درجه یک</p>
+            <span className="bg-white/20 backdrop-blur px-3 py-1.5 rounded-lg text-[11px] font-bold">خرید کنید</span>
+          </div>
+          <div className="rounded-2xl p-6 bg-gradient-to-l from-coral-600 to-coral-400 text-white cursor-pointer hover:shadow-xl transition-all" onClick={() => setView('shop')}>
+            <h3 className="font-display text-lg mb-1">پوشاک ورزشی</h3>
+            <p className="text-[11px] text-white/80 mb-3">تا ۴۰٪ تخفیف روی محصولات ورزشی</p>
+            <span className="bg-white/20 backdrop-blur px-3 py-1.5 rounded-lg text-[11px] font-bold">مشاهده تخفیف‌ها</span>
+          </div>
+        </div>
+      </section>
+
       {/* Magazine */}
       <section className="max-w-7xl mx-auto px-4 py-8">
         <h2 className="font-display text-xl text-brand-900 mb-4">مجله تاسیز</h2>
@@ -1078,7 +1125,7 @@ function AdminOrders() {
               </div>
               <div>
                 <p className="text-[11px] font-bold text-cream-500 mb-2">مراحل پردازش:</p>
-                <div className="flex items-center gap-1">{['pending', 'processing', 'shipped', 'delivered'].map((s, i) => (<React.Fragment key={s}><div className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold ${statuses.indexOf(selected.status) >= i ? 'bg-brand-900 text-white' : 'bg-cream-200 text-cream-500'}`}>{faNum(i + 1)}</div>{i < 3 && <div className={`flex-1 h-0.5 ${statuses.indexOf(selected.status) > i ? 'bg-brand-900' : 'bg-cream-200'}`} /></React.Fragment>))}</div>
+                <div className="flex items-center gap-1">{['pending', 'processing', 'shipped', 'delivered'].map((s, i) => { const active = statuses.indexOf(selected.status) >= i; const lineActive = statuses.indexOf(selected.status) > i; return (<React.Fragment key={s}><div className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold ${active ? 'bg-brand-900 text-white' : 'bg-cream-200 text-cream-500'}`}>{faNum(i + 1)}</div>{i < 3 && <div className={`flex-1 h-0.5 ${lineActive ? 'bg-brand-900' : 'bg-cream-200'}`}></div>}</React.Fragment>); })}</div>
               </div>
               <div className={`rounded-xl border ${darkMode ? 'border-white/10' : 'border-cream-200'} p-3`}>
                 <p className="text-[11px] font-bold text-cream-500 mb-2">اقلام سفارش:</p>
@@ -1283,16 +1330,17 @@ function AdminFinance() {
   const { orders, invoices, setInvoices, expenses, setExpenses, bankTx, darkMode, log } = useAdmin();
   const { settings } = useShop();
   const pl = computePL(orders, settings);
-  const [tab, setTab] = useState<'overview' | 'invoices' | 'expenses'>('overview');
+  const [tab, setTab] = useState<'overview' | 'invoices' | 'expenses' | 'cashflow' | 'bank'>('overview');
   const [showExpense, setShowExpense] = useState(false);
   const [newExpense, setNewExpense] = useState({ title: '', category: 'سایر', amount: 0, note: '' });
+  const cf = cashflowForecast(orders);
 
   const exportPL = () => { downloadFile(toCSV([{ ...pl }]), 'profit-loss.csv'); };
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-2 border-b border-cream-300">
-        {[{ k: 'overview', l: 'صورت سود و زیان' }, { k: 'invoices', l: 'فاکتورها' }, { k: 'expenses', l: 'هزینه‌ها' }].map(t => (
+      <div className="flex flex-wrap gap-2 border-b border-cream-300">
+        {[{ k: 'overview', l: 'صورت سود و زیان' }, { k: 'cashflow', l: 'جریان نقدی' }, { k: 'invoices', l: 'فاکتورها' }, { k: 'expenses', l: 'هزینه‌ها' }, { k: 'bank', l: 'تراکنش‌های بانکی' }].map(t => (
           <button key={t.k} onClick={() => setTab(t.k as any)} className={`pb-2 text-[12px] font-bold border-b-2 ${tab === t.k ? 'border-brand-900 text-brand-900' : 'border-transparent text-cream-500'}`}>{t.l}</button>
         ))}
       </div>
@@ -1340,6 +1388,33 @@ function AdminFinance() {
               </div>
             </div>
           )}
+        </div>
+      )}
+      {tab === 'cashflow' && (
+        <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
+          <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-4`}>پیش‌بینی جریان نقدی ۱۴ روز آینده</h3>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={cf}>
+                <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? '#242e3b' : '#E8E1CC'} />
+                <XAxis dataKey="date" tick={{ fontSize: 9, fontFamily: 'Vazirmatn' }} tickFormatter={(v) => v.slice(5)} />
+                <YAxis tick={{ fontSize: 9, fontFamily: 'Vazirmatn' }} tickFormatter={(v) => formatPrice(v / 1000000) + 'M'} />
+                <Tooltip contentStyle={{ background: '#0D1221', border: 'none', borderRadius: 12, color: '#fff', fontSize: 11 }} />
+                <Bar dataKey="inflow" fill="#1A2238" name="ورودی" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="outflow" fill="#E34A4A" name="خروجی" radius={[4, 4, 0, 0]} />
+                <Line type="monotone" dataKey="balance" stroke="#F5C518" strokeWidth={2} name="مانده" dot={false} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+      {tab === 'bank' && (
+        <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
+          <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-3`}>تراکنش‌های بانکی</h3>
+          <table className="w-full text-[12px]">
+            <thead><tr className={`border-y ${darkMode ? 'border-white/10 bg-white/5' : 'border-cream-300 bg-cream-100/70'}`}><th className="text-start py-2 px-2 font-bold text-cream-500 text-[10.5px]">نوع</th><th className="text-start py-2 px-2 font-bold text-cream-500 text-[10.5px]">روش</th><th className="text-start py-2 px-2 font-bold text-cream-500 text-[10.5px]">مبلغ</th><th className="text-start py-2 px-2 font-bold text-cream-500 text-[10.5px]">تاریخ</th><th className="text-start py-2 px-2 font-bold text-cream-500 text-[10.5px]">تطابق</th></tr></thead>
+            <tbody>{bankTx.map((tx: any) => (<tr key={tx.id} className={`border-b ${darkMode ? 'border-white/5' : 'border-cream-100'}`}><td className="py-2 px-2"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${tx.type === 'in' ? 'bg-emerald-100 text-emerald-700' : 'bg-coral-100 text-coral-700'}`}>{tx.type === 'in' ? 'ورودی' : 'خروجی'}</span></td><td className="py-2 px-2">{tx.method}</td><td className="py-2 px-2 tnum">{formatPrice(tx.amount)}</td><td className="py-2 px-2">{dayLabel(new Date(tx.date))}</td><td className="py-2 px-2">{tx.matched ? <span className="text-emerald-600 text-[10px] font-bold">تطابق یافته</span> : <span className="text-amber-600 text-[10px] font-bold">در انتظار</span>}</td></tr>))}</tbody>
+          </table>
         </div>
       )}
     </div>
@@ -1508,11 +1583,39 @@ function AdminOperations() {
 
 function AdminSystem() {
   const { roles, audit, loginHistory, errorLog, integrations, darkMode, log, setIsAdmin } = useAdmin();
-  const [tab, setTab] = useState<'roles' | 'audit' | 'security' | 'integrations'>('roles');
+  const [tab, setTab] = useState<'roles' | 'audit' | 'security' | 'integrations' | 'backup'>('roles');
+  const backupRef = useRef<HTMLInputElement>(null);
+
+  const exportBackup = () => {
+    const data: Record<string, any> = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('tasis-')) { try { data[key] = JSON.parse(localStorage.getItem(key) || ''); } catch { data[key] = localStorage.getItem(key); } }
+    }
+    downloadFile(JSON.stringify(data, null, 2), `tasis-backup-${new Date().toISOString().slice(0, 10)}.json`, 'application/json');
+    log('خروجی پشتیبان', 'system');
+  };
+
+  const importBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const data = JSON.parse(ev.target?.result as string);
+        Object.entries(data).forEach(([key, val]) => { localStorage.setItem(key, JSON.stringify(val)); });
+        log('بازیابی پشتیبان', 'system');
+        alert('بازیابی با موفقیت انجام شد. صفحه بارگذاری مجدد می‌شود.');
+        window.location.reload();
+      } catch { alert('فایل پشتیبان نامعتبر است'); }
+    };
+    reader.readAsText(file);
+  };
+
   return (
     <div className="space-y-4">
-      <div className="flex gap-2 border-b border-cream-300">
-        {[{ k: 'roles', l: 'نقش‌ها' }, { k: 'audit', l: 'لاگ رویدادها' }, { k: 'security', l: 'ورودها و خطاها' }, { k: 'integrations', l: 'یکپارچگی‌ها' }].map(t => (
+      <div className="flex flex-wrap gap-2 border-b border-cream-300">
+        {[{ k: 'roles', l: 'نقش‌ها' }, { k: 'audit', l: 'لاگ رویدادها' }, { k: 'security', l: 'ورودها و خطاها' }, { k: 'integrations', l: 'یکپارچگی‌ها' }, { k: 'backup', l: 'پشتیبان‌گیری' }].map(t => (
           <button key={t.k} onClick={() => setTab(t.k as any)} className={`pb-2 text-[12px] font-bold border-b-2 ${tab === t.k ? 'border-brand-900 text-brand-900' : 'border-transparent text-cream-500'}`}>{t.l}</button>
         ))}
       </div>
@@ -1540,18 +1643,32 @@ function AdminSystem() {
       {tab === 'integrations' && (
         <div className="space-y-2">{integrations.map((i: any) => (<div key={i.id} className={`rounded-xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-3 flex items-center justify-between`}><div><span className="text-[12px] font-bold">{i.name}</span><span className="text-[10px] text-cream-500 ms-2">({i.type})</span></div><button className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${i.connected ? 'bg-emerald-100 text-emerald-700' : 'bg-cream-100 text-cream-500'}`}>{i.connected ? 'متصل' : 'قطع'}</button></div>))}</div>
       )}
+      {tab === 'backup' && (
+        <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5 space-y-4`}>
+          <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'}`}>پشتیبان‌گیری و بازیابی</h3>
+          <p className="text-[11px] text-cream-500">تمام داده‌های فروشگاه در localStorage مرورگر ذخیره می‌شوند. با پشتیبان‌گیری می‌توانید داده‌ها را به فایل JSON صادر و در صورت نیاز بازیابی کنید.</p>
+          <div className="flex flex-wrap gap-3">
+            <button onClick={exportBackup} className="flex items-center gap-2 bg-brand-900 text-white px-4 py-2.5 rounded-xl text-[12px] font-bold"><IconDownload className="w-4 h-4" />دانلود فایل پشتیبان</button>
+            <input ref={backupRef} type="file" accept=".json" onChange={importBackup} className="hidden" />
+            <button onClick={() => backupRef.current?.click()} className="flex items-center gap-2 border border-cream-300 px-4 py-2.5 rounded-xl text-[12px] font-bold"><IconUpload className="w-4 h-4" />بازیابی از فایل</button>
+          </div>
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+            <p className="text-[11px] font-bold text-amber-700">توجه: داده‌ها در localStorage نگهداری می‌شوند و با پاک کردن حافظه مرورگر حذف خواهند شد.</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 function AdminSettings() {
-  const { settings, setSettings, darkMode } = useAdmin();
-  const { setSettings: setShopSettings } = useShop();
+  const { darkMode } = useAdmin();
+  const { settings, setSettings: setShopSettings } = useShop();
   const [form, setForm] = useState({ ...settings });
   const logoRef = useRef<HTMLInputElement>(null);
   const bannerRef = useRef<HTMLInputElement>(null);
 
-  const save = () => { setShopSettings(form); setSettings(form); };
+  const save = () => { setShopSettings(form); };
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1597,12 +1714,20 @@ function AdminSettings() {
         <label className="flex items-center gap-2 text-[12px] mb-2"><input type="checkbox" checked={form.tickerTexts?.length > 0} onChange={e => setForm({ ...form, tickerTexts: e.target.checked ? ['ارسال رایگان برای خرید بالای ۱.۵ میلیون تومان'] : [] })} />نمایش نوار اطلاعیه</label>
         <input value={form.tickerTexts?.join(' | ') || ''} onChange={e => setForm({ ...form, tickerTexts: e.target.value.split('|').map(s => s.trim()).filter(Boolean) })} placeholder="متن‌ها با | جدا شوند" className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" />
       </div>
+      <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
+        <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-4`}>بنرهای صفحه اصلی</h3>
+        <p className="text-[11px] text-cream-500 mb-3">بنرها از بخش مدیریت محتوا قابل مدیریت هستند. برای افزودن بنر جدید به بخش «مدیریت محتوا» مراجعه کنید.</p>
+        <div className="flex items-center gap-3">
+          <input ref={bannerRef} type="file" accept="image/*" className="hidden" />
+          <button onClick={() => bannerRef.current?.click()} className="border border-cream-300 rounded-xl px-3 py-2 text-[11px] font-bold flex items-center gap-1"><IconUpload className="w-4 h-4" />آپلود تصویر بنر</button>
+        </div>
+      </div>
       <div className={`rounded-2xl border border-coral-200 bg-coral-50 p-5`}>
         <h3 className="text-sm font-bold text-coral-700 mb-2">منطقه خطر</h3>
         <p className="text-[11px] text-coral-600 mb-3">بازنشانی تمام داده‌های فروشگاه به حالت اولیه</p>
         <button onClick={() => { if (confirm('آیا مطمئن هستید؟ تمام داده‌ها حذف خواهند شد.')) { localStorage.clear(); window.location.reload(); } }} className="bg-coral-500 text-white px-4 py-2 rounded-xl text-[12px] font-bold">بازنشانی داده‌ها</button>
       </div>
-      <button onClick={save} className="bg-brand-900 text-white px-6 py-3 rounded-xl font-extrabold text-sm">ذخیره تنظیمات</button>
+      <button onClick={save} className="bg-brand-900 text-white px-6 py-3 rounded-xl font-extrabold text-sm shadow-lg shadow-brand-900/25">ذخیره تنظیمات</button>
     </div>
   );
 }
