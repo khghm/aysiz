@@ -117,6 +117,28 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
     else localStorage.removeItem('tasis-admin');
   }, [isAdmin]);
 
+  // Auto-generate invoices for new orders
+  useEffect(() => {
+    const shopOrders = load<any[]>('tasis-orders', []);
+    const existingInvoiceOrderIds = invoices.map((inv: any) => inv.orderId);
+    
+    shopOrders.forEach((order: any) => {
+      if (!existingInvoiceOrderIds.includes(order.id)) {
+        const invoiceNumber = `INV-${String(invoices.length + 1).padStart(3, '0')}`;
+        const newInvoice = {
+          id: `inv-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          number: invoiceNumber,
+          orderId: order.id,
+          customer: order.customer,
+          amount: order.total,
+          status: order.status === 'pending' ? 'pending' : 'paid',
+          date: order.createdAt
+        };
+        setInvoices([...invoices, newInvoice]);
+      }
+    });
+  }, []);
+
   return (
     <AdminContext.Provider value={{
       isAdmin, setIsAdmin, darkMode, toggleDark, currentRole, setRole, roles, setRoles,
