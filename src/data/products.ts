@@ -5,7 +5,7 @@ export interface Product {
   sales: number; isNew: boolean; effective: boolean; description: string;
   features: string[]; specs: Record<string, string>; sku: string;
   commission: number; vendor: string; metaTitle?: string; metaDesc?: string; metaKeywords?: string;
-  reviews?: Review[];
+  reviews?: Review[]; lowStockThreshold?: number;
 }
 
 export interface Category {
