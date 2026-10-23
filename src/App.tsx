@@ -100,7 +100,7 @@ function Header() {
           <div className="w-10 h-10 rounded-xl bg-brand-900 flex items-center justify-center">
             <span className="text-white font-display text-lg">ت</span>
           </div>
-          <span className="font-display text-xl text-brand-900 hidden sm:block">{settings.storeName || 'تاسیز'}</span>
+          <span className="font-display text-xl text-brand-900 hidden sm:block">{settings.storeName || 'تای سیز'}</span>
         </div>
         <div className="flex-1 max-w-xl relative">
           <div className="relative">
@@ -169,7 +169,7 @@ function HomeView() {
           <div className="absolute bottom-10 left-10 w-48 h-48 rounded-full bg-coral-500 blur-3xl animate-floaty" style={{ animationDelay: '2s' }} />
         </div>
         <div className="max-w-7xl mx-auto relative z-10">
-          <h1 className="font-display text-3xl sm:text-5xl mb-4">فروشگاه آنلاین <span className="text-accent-500">تاسیز</span></h1>
+          <h1 className="font-display text-3xl sm:text-5xl mb-4">فروشگاه آنلاین <span className="text-accent-500">تای سیز</span></h1>
           <p className="text-brand-200 text-sm sm:text-base max-w-lg mb-6">بهترین پوشاک با کیفیت تولیدی و برندهای معتبر. لباس زیر، تی‌شرت، پیراهن، دمپایی، صندل و جوراب برای تمام سنین.</p>
           <button onClick={() => setView('shop')} className="bg-accent-500 text-brand-950 font-extrabold px-6 py-3 rounded-xl hover:bg-accent-400 transition-colors shadow-lg">مشاهده محصولات</button>
         </div>
@@ -255,7 +255,7 @@ function HomeView() {
       {/* BookShelf - Horizontal Scroll */}
       <section className="max-w-7xl mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-display text-xl text-brand-900">پیشنهاد ویژه تاسیز</h2>
+          <h2 className="font-display text-xl text-brand-900">پیشنهاد ویژه تای سیز</h2>
           <button onClick={() => setView('shop')} className="text-[12px] font-bold text-brand-600 hover:text-brand-900 flex items-center gap-1">مشاهده همه <IconChevronLeft className="w-4 h-4" /></button>
         </div>
         <div className="shelf flex gap-4 pb-4">
@@ -285,7 +285,7 @@ function HomeView() {
 
       {/* Magazine */}
       <section className="max-w-7xl mx-auto px-4 py-8">
-        <h2 className="font-display text-xl text-brand-900 mb-4">مجله تاسیز</h2>
+        <h2 className="font-display text-xl text-brand-900 mb-4">مجله تای سیز</h2>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {articles.slice(0, 3).map(a => (
             <div key={a.id} className="rounded-2xl overflow-hidden border border-cream-200 hover:shadow-lg transition-all cursor-pointer" onClick={() => { setSelectedPost(a.id); setView('post'); }}>
@@ -742,7 +742,7 @@ function BlogView() {
   const { articles, setView, setSelectedPost } = useShop();
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 animate-fade">
-      <h1 className="font-display text-xl text-brand-900 mb-6">مجله تاسیز</h1>
+      <h1 className="font-display text-xl text-brand-900 mb-6">مجله تای سیز</h1>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {articles.map(a => (
           <div key={a.id} className="rounded-2xl overflow-hidden border border-cream-200 hover:shadow-lg transition-all cursor-pointer" onClick={() => { setSelectedPost(a.id); setView('post'); }}>
@@ -822,8 +822,8 @@ function Footer() {
     <footer className="bg-brand-950 text-white mt-12">
       <div className="max-w-7xl mx-auto px-4 py-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
         <div>
-          <div className="flex items-center gap-2 mb-3"><div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center"><span className="font-display text-sm">ت</span></div><span className="font-display text-lg">{settings.storeName || 'تاسیز'}</span></div>
-          <p className="text-[12px] text-brand-300 leading-6">فروشگاه آنلاین پوشاک تاسیز با سال‌ها تجربه در تولید و فروش انواع پوشاک با کیفیت.</p>
+          <div className="flex items-center gap-2 mb-3"><div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center"><span className="font-display text-sm">ت</span></div><span className="font-display text-lg">{settings.storeName || 'تای سیز'}</span></div>
+          <p className="text-[12px] text-brand-300 leading-6">فروشگاه آنلاین پوشاک تای سیز با سال‌ها تجربه در تولید و فروش انواع پوشاک با کیفیت.</p>
         </div>
         <div>
           <h4 className="font-bold text-sm mb-3">دسترسی سریع</h4>
@@ -842,7 +842,7 @@ function Footer() {
           </div>
         </div>
       </div>
-      <div className="border-t border-white/10 py-4 text-center text-[11px] text-brand-400">تمامی حقوق محفوظ است | فروشگاه تاسیز {faNum(new Date().getFullYear())}</div>
+      <div className="border-t border-white/10 py-4 text-center text-[11px] text-brand-400">تمامی حقوق محفوظ است | فروشگاه تای سیز {faNum(new Date().getFullYear())}</div>
     </footer>
   );
 }
@@ -869,7 +869,7 @@ function AdminLogin() {
       <div className="relative bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm animate-rise">
         <div className="text-center mb-6">
           <div className="w-14 h-14 rounded-xl bg-brand-900 flex items-center justify-center mx-auto mb-3"><span className="text-white font-display text-xl">ت</span></div>
-          <h2 className="font-display text-xl text-brand-900">پنل مدیریت تاسیز</h2>
+          <h2 className="font-display text-xl text-brand-900">پنل مدیریت تای سیز</h2>
           <p className="text-[12px] text-cream-500 mt-1">برای ورود اطلاعات مدیر را وارد کنید</p>
         </div>
         <div className="space-y-3">
@@ -935,7 +935,7 @@ function AdminPanel() {
       {/* Sidebar */}
       <aside className={`fixed inset-y-0 start-0 z-40 w-64 bg-brand-950 border-e border-white/5 overflow-y-auto transition-transform lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full rtl:translate-x-full lg:rtl:translate-x-0'}`}>
         <div className="p-4 border-b border-white/5">
-          <div className="flex items-center gap-2"><div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center"><span className="text-white font-display text-sm">ت</span></div><span className="font-display text-white text-lg">پنل تاسیز</span></div>
+          <div className="flex items-center gap-2"><div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center"><span className="text-white font-display text-sm">ت</span></div><span className="font-display text-white text-lg">پنل تای سیز</span></div>
         </div>
         <nav className="p-3 space-y-1">
           {sections.map(s => (
@@ -1276,7 +1276,7 @@ function AdminProducts() {
         <select value={catFilter} onChange={e => setCatFilter(e.target.value)} className="rounded-xl border border-cream-300 bg-white px-3 py-2 text-[12px] outline-none">
           <option value="">همه دسته‌ها</option>{categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
-        <button onClick={() => { setEditing({ name: '', category: 'underwear', subcategory: 'briefs', brand: 'تاسیز', price: 0, discount: 0, rating: 0, image: '', book: [], colors: [], sizes: [], stock: 0, sales: 0, isNew: true, effective: true, description: '', features: [], specs: {}, sku: '', commission: 8, vendor: '' }); setShowForm(true); }} className="bg-brand-900 text-white px-4 py-2 rounded-xl text-[12px] font-bold flex items-center gap-1"><IconPlus className="w-4 h-4" />افزودن محصول</button>
+        <button onClick={() => { setEditing({ name: '', category: 'underwear', subcategory: 'briefs', brand: 'تای سیز', price: 0, discount: 0, rating: 0, image: '', book: [], colors: [], sizes: [], stock: 0, sales: 0, isNew: true, effective: true, description: '', features: [], specs: {}, sku: '', commission: 8, vendor: '' }); setShowForm(true); }} className="bg-brand-900 text-white px-4 py-2 rounded-xl text-[12px] font-bold flex items-center gap-1"><IconPlus className="w-4 h-4" />افزودن محصول</button>
       </div>
       <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} overflow-hidden`}>
         <div className="overflow-x-auto">
@@ -1444,7 +1444,7 @@ function AdminInvoices() {
 <body>
   <div class="header">
     <div class="logo-section">
-      <div class="logo">فروشگاه اینترنتی پوشاک تاسیز</div>
+      <div class="logo">فروشگاه اینترنتی پوشاک تای سیز</div>
       <div class="store-info">
         <div>تلفن: ${settings.phone}</div>
         <div>ایمیل: ${settings.email}</div>
@@ -1522,7 +1522,7 @@ function AdminInvoices() {
   </div>
 
   <div class="footer">
-    <div>از خرید شما متشکریم | فروشگاه اینترنتی پوشاک تاسیز</div>
+    <div>از خرید شما متشکریم | فروشگاه اینترنتی پوشاک تای سیز</div>
     <div>این فاکتور معتبر و مورد تأیید می‌باشد</div>
   </div>
 
@@ -1632,7 +1632,7 @@ function InvoicePreview({ invoice }: { invoice: any }) {
     <div className="border border-cream-300 rounded-xl p-6 bg-white">
       <div className="flex justify-between items-start border-b-2 border-brand-900 pb-4 mb-6">
         <div>
-          <h2 className="text-xl font-bold text-brand-900 mb-2">فروشگاه اینترنتی پوشاک تاسیز</h2>
+          <h2 className="text-xl font-bold text-brand-900 mb-2">فروشگاه اینترنتی پوشاک تای سیز</h2>
           <div className="text-[11px] text-cream-500 space-y-1">
             <p>تلفن: {settings.phone}</p>
             <p>ایمیل: {settings.email}</p>
@@ -1712,7 +1712,7 @@ function InvoicePreview({ invoice }: { invoice: any }) {
       </div>
 
       <div className="mt-6 pt-4 border-t-2 border-brand-900 text-center text-[11px] text-cream-500">
-        <p>از خرید شما متشکریم | فروشگاه اینترنتی پوشاک تاسیز</p>
+        <p>از خرید شما متشکریم | فروشگاه اینترنتی پوشاک تای سیز</p>
       </div>
     </div>
   );
