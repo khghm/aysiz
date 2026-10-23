@@ -55,6 +55,21 @@ export const brands = [
   'تاسیز', 'نایک', 'آدیداس', 'پوما', 'ریباک', 'آندرآرمور', 'کاترپیلار', 'نیوبالانس', 'اسکچرز', 'کروکس', 'ایزادی', 'هوپ'
 ];
 
+const productImages = [
+  'https://image.qwenlm.ai/generated-images/6017aa05-0a98-4a62-b861-3fe4a9689232/_result.png',
+  'https://image.qwenlm.ai/generated-images/7cc10ed9-190e-4ab3-9c5c-718ad4e4ba76/_result.png',
+  'https://image.qwenlm.ai/generated-images/0af82278-b5f2-4868-9db8-7fe2a97e48b8/_result.png',
+  'https://image.qwenlm.ai/generated-images/19154d2e-fac6-4300-9fd0-a42c3f3d1e13/_result.png',
+  'https://image.qwenlm.ai/generated-images/9c113576-0611-41dc-afff-b1a1eacad01a/_result.png',
+  'https://image.qwenlm.ai/generated-images/cb23bb5b-a483-4cf0-bbb9-cecfe0ebe365/_result.png',
+  'https://image.qwenlm.ai/generated-images/76cd9c54-f3c6-4224-9dfd-b64207cb7119/_result.png',
+  'https://image.qwenlm.ai/generated-images/01c6a3ea-15d6-40f9-8a8c-9e7f4bb722ae/_result.png',
+  'https://image.qwenlm.ai/generated-images/ce4c2c9f-2bbc-4808-b9bb-c9a55ddcd000/_result.png',
+  'https://image.qwenlm.ai/generated-images/c0898fb0-72d4-4341-9cf6-fc2d1bfc9349/_result.png',
+  'https://image.qwenlm.ai/generated-images/9c113576-0611-41dc-afff-b1a1eacad01a/_result.png',
+  'https://image.qwenlm.ai/generated-images/01c6a3ea-15d6-40f9-8a8c-9e7f4bb722ae/_result.png',
+];
+
 const gradients = [
   'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
   'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
@@ -73,7 +88,7 @@ const gradients = [
 export const seedProducts: Product[] = [
   {
     id: 'p1', name: 'شورت مردانه نخی پریمیوم', category: 'underwear', subcategory: 'briefs', brand: 'تاسیز',
-    price: 285000, discount: 15, rating: 4.5, image: gradients[0], book: ['underwear', 'briefs'],
+    price: 285000, discount: 15, rating: 4.5, image: productImages[0], book: ['underwear', 'briefs'],
     colors: [{ name: 'مشکی', hex: '#1a1a1a' }, { name: 'سرمه‌ای', hex: '#1A2238' }, { name: 'خاکستری', hex: '#6b7280' }],
     sizes: ['S', 'M', 'L', 'XL', 'XXL'], stock: 45, sales: 230, isNew: true, effective: true,
     description: 'شورت مردانه از جنس نخ پنبه درجه یک با دوخت مقاوم و طراحی ارگونومیک. مناسب استفاده روزانه.',
@@ -83,7 +98,7 @@ export const seedProducts: Product[] = [
   },
   {
     id: 'p2', name: 'سوتین زنانه اسپرت بدون فنر', category: 'underwear', subcategory: 'bra', brand: 'تاسیز',
-    price: 420000, discount: 20, rating: 4.7, image: gradients[1], book: ['underwear', 'bra'],
+    price: 420000, discount: 20, rating: 4.7, image: productImages[1], book: ['underwear', 'bra'],
     colors: [{ name: 'مشکی', hex: '#1a1a1a' }, { name: 'سفید', hex: '#ffffff' }, { name: 'صورتی', hex: '#f9a8d4' }],
     sizes: ['A', 'B', 'C', 'D'], stock: 32, sales: 185, isNew: false, effective: true,
     description: 'سوتین اسپرت بدون فنر با پشتیبانی عالی، مناسب ورزش و استفاده روزانه.',
@@ -93,7 +108,7 @@ export const seedProducts: Product[] = [
   },
   {
     id: 'p3', name: 'رکابی مردانه یقه گرد', category: 'underwear', subcategory: 'tank', brand: 'تاسیز',
-    price: 195000, discount: 10, rating: 4.3, image: gradients[2], book: ['underwear', 'tank'],
+    price: 195000, discount: 10, rating: 4.3, image: productImages[2], book: ['underwear', 'tank'],
     colors: [{ name: 'سفید', hex: '#ffffff' }, { name: 'مشکی', hex: '#1a1a1a' }, { name: 'طوسی', hex: '#9ca3af' }],
     sizes: ['M', 'L', 'XL', 'XXL'], stock: 60, sales: 310, isNew: false, effective: true,
     description: 'رکابی مردانه با یقه گرد و جنس نخ پنبه خنک، مناسب فصل گرما.',
@@ -103,7 +118,7 @@ export const seedProducts: Product[] = [
   },
   {
     id: 'p4', name: 'تی‌شرت مردانه طرح‌دار', category: 'tshirt', subcategory: 'tshirt-m', brand: 'نایک',
-    price: 890000, discount: 25, rating: 4.8, image: gradients[3], book: ['tshirt', 'tshirt-m'],
+    price: 890000, discount: 25, rating: 4.8, image: productImages[3], book: ['tshirt', 'tshirt-m'],
     colors: [{ name: 'مشکی', hex: '#1a1a1a' }, { name: 'سفید', hex: '#ffffff' }, { name: 'آبی', hex: '#3b82f6' }],
     sizes: ['S', 'M', 'L', 'XL'], stock: 28, sales: 420, isNew: true, effective: true,
     description: 'تی‌شرت مردانه با طرح مدرن و جنس درای‌فیت، مناسب ورزش و استفاده روزمره.',
@@ -113,7 +128,7 @@ export const seedProducts: Product[] = [
   },
   {
     id: 'p5', name: 'پیراهن مردانه آستین بلند کلاسیک', category: 'shirt', subcategory: 'shirt-m', brand: 'ایزادی',
-    price: 1250000, discount: 30, rating: 4.6, image: gradients[4], book: ['shirt', 'shirt-m'],
+    price: 1250000, discount: 30, rating: 4.6, image: productImages[4], book: ['shirt', 'shirt-m'],
     colors: [{ name: 'سفید', hex: '#ffffff' }, { name: 'آبی روشن', hex: '#93c5fd' }, { name: 'صورتی', hex: '#fda4af' }],
     sizes: ['S', 'M', 'L', 'XL', 'XXL'], stock: 15, sales: 180, isNew: false, effective: true,
     description: 'پیراهن مردانه رسمی با پارچه تترون درجه یک، مناسب محیط کار و مجالس.',
@@ -123,7 +138,7 @@ export const seedProducts: Product[] = [
   },
   {
     id: 'p6', name: 'دمپایی ابری مردانه', category: 'slipper', subcategory: 'slipper-m', brand: 'کروکس',
-    price: 350000, discount: 0, rating: 4.4, image: gradients[5], book: ['slipper', 'slipper-m'],
+    price: 350000, discount: 0, rating: 4.4, image: productImages[5], book: ['slipper', 'slipper-m'],
     colors: [{ name: 'مشکی', hex: '#1a1a1a' }, { name: 'قهوه‌ای', hex: '#78350f' }, { name: 'سبز', hex: '#166534' }],
     sizes: ['40', '41', '42', '43', '44'], stock: 50, sales: 290, isNew: false, effective: true,
     description: 'دمپایی ابری فوق‌العاده سبک و راحت با زیره ضد لغزش.',
@@ -133,7 +148,7 @@ export const seedProducts: Product[] = [
   },
   {
     id: 'p7', name: 'صندل زنانه تابستانی', category: 'sandal', subcategory: 'sandal-w', brand: 'اسکچرز',
-    price: 780000, discount: 15, rating: 4.5, image: gradients[6], book: ['sandal', 'sandal-w'],
+    price: 780000, discount: 15, rating: 4.5, image: productImages[6], book: ['sandal', 'sandal-w'],
     colors: [{ name: 'عسلی', hex: '#d97706' }, { name: 'مشکی', hex: '#1a1a1a' }, { name: 'صورتی', hex: '#ec4899' }],
     sizes: ['36', '37', '38', '39', '40'], stock: 22, sales: 155, isNew: true, effective: true,
     description: 'صندل زنانه تابستانی با کفی طبی و طراحی شیک.',
@@ -143,7 +158,7 @@ export const seedProducts: Product[] = [
   },
   {
     id: 'p8', name: 'جوراب مردانه ساق‌دار (۳ جفت)', category: 'socks', subcategory: 'socks-m', brand: 'تاسیز',
-    price: 165000, discount: 10, rating: 4.2, image: gradients[7], book: ['socks', 'socks-m'],
+    price: 165000, discount: 10, rating: 4.2, image: productImages[7], book: ['socks', 'socks-m'],
     colors: [{ name: 'مشکی', hex: '#1a1a1a' }, { name: 'سرمه‌ای', hex: '#1e3a5f' }, { name: 'طوسی', hex: '#6b7280' }],
     sizes: ['39-42', '42-45'], stock: 80, sales: 520, isNew: false, effective: true,
     description: 'بسته ۳ جفتی جوراب مردانه ساق‌دار از جنس نخ بامبو با خاصیت ضد باکتری.',
@@ -153,7 +168,7 @@ export const seedProducts: Product[] = [
   },
   {
     id: 'p9', name: 'تی‌شرت زنانه یقه هفت', category: 'tshirt', subcategory: 'tshirt-w', brand: 'آدیداس',
-    price: 750000, discount: 20, rating: 4.6, image: gradients[8], book: ['tshirt', 'tshirt-w'],
+    price: 750000, discount: 20, rating: 4.6, image: productImages[8], book: ['tshirt', 'tshirt-w'],
     colors: [{ name: 'سفید', hex: '#ffffff' }, { name: 'مشکی', hex: '#1a1a1a' }, { name: 'یاسی', hex: '#c4b5fd' }],
     sizes: ['S', 'M', 'L', 'XL'], stock: 35, sales: 380, isNew: true, effective: true,
     description: 'تی‌شرت زنانه با یقه هفت و برش زنانه، جنس نخ پنبه نرم.',
@@ -163,7 +178,7 @@ export const seedProducts: Product[] = [
   },
   {
     id: 'p10', name: 'شورت زنانه بیکینی', category: 'underwear', subcategory: 'briefs', brand: 'تاسیز',
-    price: 195000, discount: 12, rating: 4.4, image: gradients[9], book: ['underwear', 'briefs'],
+    price: 195000, discount: 12, rating: 4.4, image: productImages[9], book: ['underwear', 'briefs'],
     colors: [{ name: 'مشکی', hex: '#1a1a1a' }, { name: 'سفید', hex: '#ffffff' }, { name: 'قرمز', hex: '#dc2626' }, { name: 'صورتی', hex: '#f9a8d4' }],
     sizes: ['S', 'M', 'L', 'XL'], stock: 55, sales: 440, isNew: false, effective: true,
     description: 'شورت زنانه مدل بیکینی با جنس میکروفایبر نرم و کشی راحت.',
@@ -173,7 +188,7 @@ export const seedProducts: Product[] = [
   },
   {
     id: 'p11', name: 'پیراهن زنانه گل‌دار', category: 'shirt', subcategory: 'shirt-w', brand: 'هوپ',
-    price: 980000, discount: 18, rating: 4.7, image: gradients[10], book: ['shirt', 'shirt-w'],
+    price: 980000, discount: 18, rating: 4.7, image: productImages[10], book: ['shirt', 'shirt-w'],
     colors: [{ name: 'آبی گل‌دار', hex: '#60a5fa' }, { name: 'صورتی گل‌دار', hex: '#f9a8d4' }],
     sizes: ['S', 'M', 'L', 'XL'], stock: 18, sales: 210, isNew: true, effective: true,
     description: 'پیراهن زنانه با طرح گل‌دار و جنس حریر نرم، مناسب مهمانی و استفاده روزانه.',
@@ -183,7 +198,7 @@ export const seedProducts: Product[] = [
   },
   {
     id: 'p12', name: 'جوراب زنانه ساق‌بلند (۲ جفت)', category: 'socks', subcategory: 'socks-w', brand: 'تاسیز',
-    price: 145000, discount: 5, rating: 4.1, image: gradients[11], book: ['socks', 'socks-w'],
+    price: 145000, discount: 5, rating: 4.1, image: productImages[11], book: ['socks', 'socks-w'],
     colors: [{ name: 'مشکی', hex: '#1a1a1a' }, { name: 'سفید', hex: '#ffffff' }, { name: 'طوسی', hex: '#9ca3af' }],
     sizes: ['36-39', '39-42'], stock: 70, sales: 350, isNew: false, effective: true,
     description: 'بسته ۲ جفتی جوراب زنانه ساق‌بلند با طرح ساده و جنس نخ پنبه.',
