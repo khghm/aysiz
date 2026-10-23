@@ -2970,25 +2970,216 @@ function AdminCustomers() {
 }
 
 function AdminReviews() {
-  const { darkMode } = useAdmin();
-  const { reviews, setReviews } = useShop();
-  const [filter, setFilter] = useState('all');
-  const filtered = reviews.filter(r => filter === 'all' || r.status === filter);
+  const { darkMode, log } = useAdmin();
+  const { reviews, setReviews, products } = useShop();
+  const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  const [ratingFilter, setRatingFilter] = useState(0);
+  const [search, setSearch] = useState('');
+  const [selectedReview, setSelectedReview] = useState<any>(null);
+  const [reply, setReply] = useState('');
+
+  const filtered = reviews.filter(r => {
+    if (filter !== 'all' && r.status !== filter) return false;
+    if (ratingFilter > 0 && r.rating < ratingFilter) return false;
+    if (search && !r.author.includes(search) && !r.text.includes(search)) return false;
+    return true;
+  });
+
+  const stats = {
+    total: reviews.length,
+    pending: reviews.filter(r => r.status === 'pending').length,
+    approved: reviews.filter(r => r.status === 'approved').length,
+    rejected: reviews.filter(r => r.status === 'rejected').length,
+    avgRating: reviews.length > 0 ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length : 0,
+  };
+
+  const ratingDistribution = [5, 4, 3, 2, 1].map(star => ({
+    star,
+    count: reviews.filter(r => r.rating === star).length,
+    percentage: reviews.length > 0 ? (reviews.filter(r => r.rating === star).length / reviews.length * 100) : 0
+  }));
+
+  const handleApprove = (id: string) => {
+    setReviews(reviews.map(x => x.id === id ? { ...x, status: 'approved' as const } : x));
+    log('تأیید نظر', id);
+  };
+
+  const handleReject = (id: string) => {
+    setReviews(reviews.map(x => x.id === id ? { ...x, status: 'rejected' as const } : x));
+    log('رد نظر', id, 'warning');
+  };
+
+  const handleReply = () => {
+    if (!reply.trim() || !selectedReview) return;
+    setReviews(reviews.map(x => x.id === selectedReview.id ? { ...x, reply } : x));
+    setSelectedReview({ ...selectedReview, reply });
+    setReply('');
+    log('پاسخ به نظر', selectedReview.id);
+  };
+
   return (
     <div className="space-y-4">
-      <div className="flex gap-2">{['all', 'pending', 'approved', 'rejected'].map(s => (<button key={s} onClick={() => setFilter(s)} className={`px-3 py-1.5 rounded-xl text-[11px] font-bold ${filter === s ? 'bg-brand-900 text-white' : 'bg-cream-100 text-brand-700'}`}>{s === 'all' ? 'همه' : s === 'pending' ? 'در انتظار' : s === 'approved' ? 'تأیید شده' : 'رد شده'}</button>))}</div>
-      <div className="space-y-2">{filtered.map(r => (
-        <div key={r.id} className={`rounded-xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-4`}>
-          <div className="flex items-center justify-between mb-1"><span className="text-[12px] font-bold">{r.author}</span><Stars rating={r.rating} /></div>
-          <p className="text-[12px] text-brand-700">{r.text}</p>
-          {r.status === 'pending' && (
-            <div className="flex gap-2 mt-2">
-              <button onClick={() => { setReviews(reviews.map(x => x.id === r.id ? { ...x, status: 'approved' } : x)); }} className="px-2 py-1 rounded-lg bg-emerald-100 text-emerald-700 text-[10px] font-bold">تأیید</button>
-              <button onClick={() => { setReviews(reviews.map(x => x.id === r.id ? { ...x, status: 'rejected' } : x)); }} className="px-2 py-1 rounded-lg bg-coral-100 text-coral-700 text-[10px] font-bold">رد</button>
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        {[
+          { l: 'کل نظرات', v: faNum(stats.total), c: 'bg-blue-50 text-blue-700', icon: <IconClipboard className="w-5 h-5" /> },
+          { l: 'در انتظار بررسی', v: faNum(stats.pending), c: 'bg-amber-50 text-amber-700', icon: <IconClock className="w-5 h-5" /> },
+          { l: 'تأیید شده', v: faNum(stats.approved), c: 'bg-emerald-50 text-emerald-700', icon: <IconCheck className="w-5 h-5" /> },
+          { l: 'رد شده', v: faNum(stats.rejected), c: 'bg-coral-50 text-coral-700', icon: <IconX className="w-5 h-5" /> },
+          { l: 'میانگین امتیاز', v: faNum(stats.avgRating.toFixed(1)), c: 'bg-purple-50 text-purple-700', icon: <IconStar className="w-5 h-5" /> },
+        ].map((k, i) => (
+          <div key={i} className={`rounded-xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-4`}>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[10px] text-cream-500">{k.l}</p>
+              <div className={k.c + ' p-1.5 rounded-lg'}>{k.icon}</div>
             </div>
-          )}
+            <p className={`text-lg font-extrabold tnum ${darkMode ? 'text-white' : 'text-brand-900'}`}>{k.v}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Rating Distribution */}
+      <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
+        <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-4`}>توزیع امتیازات</h3>
+        <div className="space-y-2">
+          {ratingDistribution.map(r => (
+            <div key={r.star} className="flex items-center gap-3">
+              <div className="flex items-center gap-1 w-16">
+                <IconStar className="w-4 h-4 text-amber-500" filled />
+                <span className="text-[12px] font-bold">{faNum(r.star)}</span>
+              </div>
+              <div className="flex-1 h-2.5 bg-cream-200 rounded-full overflow-hidden">
+                <div className="h-full bg-amber-500 rounded-full transition-all" style={{ width: `${r.percentage}%` }}></div>
+              </div>
+              <span className="tnum text-[11px] font-bold w-12 text-left">{faNum(r.count)} ({faNum(r.percentage.toFixed(0))}٪)</span>
+            </div>
+          ))}
         </div>
-      ))}</div>
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-wrap gap-2">
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="جستجو در نظرات..." className="flex-1 min-w-[200px] rounded-xl border border-cream-300 bg-white px-3 py-2 text-[12px] outline-none" />
+        <select value={filter} onChange={e => setFilter(e.target.value as any)} className="rounded-xl border border-cream-300 bg-white px-3 py-2 text-[12px] outline-none">
+          <option value="all">همه وضعیت‌ها</option>
+          <option value="pending">در انتظار</option>
+          <option value="approved">تأیید شده</option>
+          <option value="rejected">رد شده</option>
+        </select>
+        <select value={ratingFilter} onChange={e => setRatingFilter(+e.target.value)} className="rounded-xl border border-cream-300 bg-white px-3 py-2 text-[12px] outline-none">
+          <option value={0}>همه امتیازات</option>
+          <option value={5}>۵ ستاره</option>
+          <option value={4}>۴ ستاره و بالاتر</option>
+          <option value={3}>۳ ستاره و بالاتر</option>
+          <option value={2}>۲ ستاره و بالاتر</option>
+          <option value={1}>۱ ستاره</option>
+        </select>
+      </div>
+
+      {/* Reviews List */}
+      <div className="space-y-3">
+        {filtered.map(r => {
+          const product = products.find(p => p.id === r.productId);
+          return (
+            <div key={r.id} className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5 hover:shadow-lg transition-all`}>
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-brand-100 flex items-center justify-center">
+                    <IconUser className="w-5 h-5 text-brand-700" />
+                  </div>
+                  <div>
+                    <p className={`text-[13px] font-bold ${darkMode ? 'text-white' : 'text-brand-900'}`}>{r.author}</p>
+                    <p className="text-[10px] text-cream-500">{product?.name || 'محصول نامشخص'} | {dayLabel(new Date(r.date))}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex">{Array.from({ length: 5 }).map((_, i) => <IconStar key={i} className={`w-4 h-4 ${i < r.rating ? 'text-amber-500' : 'text-cream-300'}`} filled={i < r.rating} />)}</div>
+                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${r.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : r.status === 'rejected' ? 'bg-coral-100 text-coral-700' : 'bg-amber-100 text-amber-700'}`}>
+                    {r.status === 'approved' ? 'تأیید شده' : r.status === 'rejected' ? 'رد شده' : 'در انتظار'}
+                  </span>
+                </div>
+              </div>
+              
+              <p className={`text-[12px] ${darkMode ? 'text-brand-200' : 'text-brand-700'} mb-3 leading-6`}>{r.text}</p>
+              
+              {r.pros && r.pros.length > 0 && (
+                <div className="mb-2">
+                  <p className="text-[10px] font-bold text-emerald-700 mb-1">نقاط قوت:</p>
+                  <div className="flex flex-wrap gap-1">{r.pros.map((p, i) => <span key={i} className="text-[10px] bg-emerald-50 text-emerald-700 rounded-full px-2 py-0.5">{p}</span>)}</div>
+                </div>
+              )}
+              
+              {r.cons && r.cons.length > 0 && (
+                <div className="mb-3">
+                  <p className="text-[10px] font-bold text-coral-700 mb-1">نقاط ضعف:</p>
+                  <div className="flex flex-wrap gap-1">{r.cons.map((c, i) => <span key={i} className="text-[10px] bg-coral-50 text-coral-700 rounded-full px-2 py-0.5">{c}</span>)}</div>
+                </div>
+              )}
+
+              {r.reply && (
+                <div className={`rounded-lg ${darkMode ? 'bg-[#1a212c]' : 'bg-brand-50'} p-3 mb-3`}>
+                  <p className="text-[10px] font-bold text-brand-700 mb-1">پاسخ مدیر:</p>
+                  <p className="text-[11px] text-brand-700">{r.reply}</p>
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                {r.status === 'pending' && (
+                  <>
+                    <button onClick={() => handleApprove(r.id)} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-100 text-emerald-700 text-[11px] font-bold hover:bg-emerald-200 transition-colors">
+                      <IconCheck className="w-3.5 h-3.5" /> تأیید
+                    </button>
+                    <button onClick={() => handleReject(r.id)} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-coral-100 text-coral-700 text-[11px] font-bold hover:bg-coral-200 transition-colors">
+                      <IconX className="w-3.5 h-3.5" /> رد
+                    </button>
+                  </>
+                )}
+                <button onClick={() => setSelectedReview(r)} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-cream-100 text-brand-700 text-[11px] font-bold hover:bg-cream-200 transition-colors">
+                  <IconEye className="w-3.5 h-3.5" /> جزئیات
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Review Detail Modal */}
+      {selectedReview && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setSelectedReview(null)}>
+          <div className={`w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-2xl ${darkMode ? 'bg-[#151b26]' : 'bg-white'} p-6 animate-rise`} onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-brand-900'}`}>جزئیات نظر</h3>
+              <button onClick={() => setSelectedReview(null)}><IconX className="w-5 h-5" /></button>
+            </div>
+
+            <div className={`rounded-xl ${darkMode ? 'bg-[#1a212c]' : 'bg-cream-50'} p-4 mb-4`}>
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-12 h-12 rounded-full bg-brand-100 flex items-center justify-center">
+                  <IconUser className="w-6 h-6 text-brand-700" />
+                </div>
+                <div>
+                  <p className="font-bold">{selectedReview.author}</p>
+                  <div className="flex">{Array.from({ length: 5 }).map((_, i) => <IconStar key={i} className={`w-4 h-4 ${i < selectedReview.rating ? 'text-amber-500' : 'text-cream-300'}`} filled={i < selectedReview.rating} />)}</div>
+                </div>
+              </div>
+              <p className="text-[12px] leading-6">{selectedReview.text}</p>
+            </div>
+
+            {selectedReview.reply ? (
+              <div className={`rounded-xl ${darkMode ? 'bg-[#1a212c]' : 'bg-brand-50'} p-4`}>
+                <p className="text-[11px] font-bold text-brand-700 mb-2">پاسخ مدیر:</p>
+                <p className="text-[12px]">{selectedReview.reply}</p>
+              </div>
+            ) : (
+              <div>
+                <label className="text-[11px] font-bold text-cream-500 mb-2 block">پاسخ به نظر:</label>
+                <textarea value={reply} onChange={e => setReply(e.target.value)} placeholder="پاسخ خود را بنویسید..." className="w-full rounded-xl border border-cream-300 px-3 py-2.5 text-[12px] outline-none h-24 resize-none" />
+                <button onClick={handleReply} className="w-full mt-2 bg-brand-900 text-white py-2.5 rounded-xl font-bold text-[12px]">ارسال پاسخ</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2997,35 +3188,191 @@ function AdminDiscounts() {
   const { discountCodes, setDiscountCodes } = useShop();
   const { darkMode, log } = useAdmin();
   const [showForm, setShowForm] = useState(false);
+  const [editingCode, setEditingCode] = useState<any>(null);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'expired'>('all');
   const [form, setForm] = useState({ code: '', type: 'percent', value: 10, maxUses: 100, expiresAt: '2025-12-31', active: true });
 
+  const stats = {
+    total: discountCodes.length,
+    active: discountCodes.filter((c: any) => c.active).length,
+    expired: discountCodes.filter((c: any) => new Date(c.expiresAt) < new Date()).length,
+    totalUses: discountCodes.reduce((s: number, c: any) => s + c.usedCount, 0),
+    totalDiscount: discountCodes.reduce((s: number, c: any) => {
+      return s + (c.type === 'percent' ? c.usedCount * c.value * 10000 : c.usedCount * c.value);
+    }, 0),
+  };
+
+  const filtered = discountCodes.filter((c: any) => {
+    if (search && !c.code.toLowerCase().includes(search.toLowerCase())) return false;
+    if (statusFilter === 'active' && !c.active) return false;
+    if (statusFilter === 'inactive' && c.active) return false;
+    if (statusFilter === 'expired' && new Date(c.expiresAt) >= new Date()) return false;
+    return true;
+  });
+
   const save = () => {
-    const newCode = { ...form, id: `dc-${Date.now()}`, usedCount: 0 };
-    setDiscountCodes([...discountCodes, newCode]);
-    log(`ایجاد کد تخفیف ${form.code}`, newCode.id);
+    if (editingCode) {
+      setDiscountCodes(discountCodes.map((x: any) => x.id === editingCode.id ? { ...editingCode, ...form } : x));
+      log(`ویرایش کد تخفیف ${form.code}`, editingCode.id);
+    } else {
+      const newCode = { ...form, id: `dc-${Date.now()}`, usedCount: 0 };
+      setDiscountCodes([...discountCodes, newCode]);
+      log(`ایجاد کد تخفیف ${form.code}`, newCode.id);
+    }
     setShowForm(false);
+    setEditingCode(null);
+    setForm({ code: '', type: 'percent', value: 10, maxUses: 100, expiresAt: '2025-12-31', active: true });
+  };
+
+  const handleEdit = (code: any) => {
+    setEditingCode(code);
+    setForm({ code: code.code, type: code.type, value: code.value, maxUses: code.maxUses, expiresAt: code.expiresAt, active: code.active });
+    setShowForm(true);
+  };
+
+  const handleDelete = (id: string) => {
+    if (confirm('آیا از حذف این کد تخفیف مطمئن هستید؟')) {
+      setDiscountCodes(discountCodes.filter((c: any) => c.id !== id));
+      log('حذف کد تخفیف', id, 'warning');
+    }
   };
 
   return (
     <div className="space-y-4">
-      <button onClick={() => setShowForm(true)} className="bg-brand-900 text-white px-4 py-2 rounded-xl text-[12px] font-bold flex items-center gap-1"><IconPlus className="w-4 h-4" />ایجاد کد تخفیف</button>
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        {[
+          { l: 'کل کدها', v: faNum(stats.total), c: 'bg-blue-50 text-blue-700', icon: <IconTag className="w-5 h-5" /> },
+          { l: 'فعال', v: faNum(stats.active), c: 'bg-emerald-50 text-emerald-700', icon: <IconCheck className="w-5 h-5" /> },
+          { l: 'منقضی شده', v: faNum(stats.expired), c: 'bg-coral-50 text-coral-700', icon: <IconClock className="w-5 h-5" /> },
+          { l: 'کل استفاده', v: faNum(stats.totalUses), c: 'bg-purple-50 text-purple-700', icon: <IconUsers className="w-5 h-5" /> },
+          { l: 'تخفیف داده شده', v: formatPrice(stats.totalDiscount), c: 'bg-amber-50 text-amber-700', icon: <IconDollar className="w-5 h-5" /> },
+        ].map((k, i) => (
+          <div key={i} className={`rounded-xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-4`}>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[10px] text-cream-500">{k.l}</p>
+              <div className={k.c + ' p-1.5 rounded-lg'}>{k.icon}</div>
+            </div>
+            <p className={`text-lg font-extrabold tnum ${darkMode ? 'text-white' : 'text-brand-900'}`}>{k.v}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Actions */}
+      <div className="flex flex-wrap gap-2">
+        <button onClick={() => { setEditingCode(null); setForm({ code: '', type: 'percent', value: 10, maxUses: 100, expiresAt: '2025-12-31', active: true }); setShowForm(true); }} className="bg-brand-900 text-white px-4 py-2.5 rounded-xl text-[12px] font-bold flex items-center gap-1 shadow-lg shadow-brand-900/25"><IconPlus className="w-4 h-4" />ایجاد کد تخفیف جدید</button>
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="جستجو کد تخفیف..." className="flex-1 min-w-[200px] rounded-xl border border-cream-300 bg-white px-3 py-2 text-[12px] outline-none" />
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as any)} className="rounded-xl border border-cream-300 bg-white px-3 py-2 text-[12px] outline-none">
+          <option value="all">همه وضعیت‌ها</option>
+          <option value="active">فعال</option>
+          <option value="inactive">غیرفعال</option>
+          <option value="expired">منقضی شده</option>
+        </select>
+      </div>
+
+      {/* Discount Codes Table */}
       <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} overflow-hidden`}>
-        <table className="w-full text-[12px]"><thead><tr className={`border-y ${darkMode ? 'border-white/10 bg-white/5' : 'border-cream-300 bg-cream-100/70'}`}><th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">کد</th><th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">نوع</th><th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">مقدار</th><th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">استفاده/سقف</th><th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">انقضا</th><th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">وضعیت</th></tr></thead>
-          <tbody>{discountCodes.map((c: any) => (<tr key={c.id} className={`border-b ${darkMode ? 'border-white/5' : 'border-cream-100'}`}><td className="py-2 px-3 font-bold">{c.code}</td><td className="py-2 px-3">{c.type === 'percent' ? 'درصدی' : 'مبلغ ثابت'}</td><td className="py-2 px-3 tnum">{c.type === 'percent' ? `${faNum(c.value)}٪` : formatPrice(c.value)}</td><td className="py-2 px-3 tnum">{faNum(c.usedCount)}/{faNum(c.maxUses)}</td><td className="py-2 px-3">{c.expiresAt}</td><td className="py-2 px-3"><button onClick={() => { setDiscountCodes(discountCodes.map((x: any) => x.id === c.id ? { ...x, active: !x.active } : x)); }} className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${c.active ? 'bg-emerald-100 text-emerald-700' : 'bg-cream-100 text-cream-500'}`}>{c.active ? 'فعال' : 'غیرفعال'}</button></td></tr>))}</tbody>
-        </table>
+        <div className="overflow-x-auto">
+          <table className="w-full text-[12px]">
+            <thead>
+              <tr className={`border-y ${darkMode ? 'border-white/10 bg-white/5' : 'border-cream-300 bg-cream-100/70'}`}>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">کد</th>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">نوع</th>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">مقدار</th>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">میزان استفاده</th>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">انقضا</th>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">وضعیت</th>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">عملیات</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((c: any) => {
+                const usagePercentage = (c.usedCount / c.maxUses) * 100;
+                const isExpired = new Date(c.expiresAt) < new Date();
+                return (
+                  <tr key={c.id} className={`border-b ${darkMode ? 'border-white/5 hover:bg-white/5' : 'border-cream-100 hover:bg-brand-50/40'} transition-colors`}>
+                    <td className="py-2.5 px-3">
+                      <span className="font-mono font-bold text-brand-700 bg-cream-100 px-2 py-1 rounded">{c.code}</span>
+                    </td>
+                    <td className="py-2.5 px-3">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${c.type === 'percent' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
+                        {c.type === 'percent' ? 'درصدی' : 'مبلغ ثابت'}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3 tnum font-bold">
+                      {c.type === 'percent' ? `${faNum(c.value)}٪` : formatPrice(c.value)}
+                    </td>
+                    <td className="py-2.5 px-3">
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-2 bg-cream-200 rounded-full overflow-hidden w-20">
+                          <div className={`h-full rounded-full ${usagePercentage > 80 ? 'bg-coral-500' : usagePercentage > 50 ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${Math.min(100, usagePercentage)}%` }}></div>
+                        </div>
+                        <span className="tnum text-[10px]">{faNum(c.usedCount)}/{faNum(c.maxUses)}</span>
+                      </div>
+                    </td>
+                    <td className="py-2.5 px-3 text-[11px]">
+                      <span className={isExpired ? 'text-coral-600 font-bold' : ''}>{c.expiresAt}</span>
+                    </td>
+                    <td className="py-2.5 px-3">
+                      <button onClick={() => { setDiscountCodes(discountCodes.map((x: any) => x.id === c.id ? { ...x, active: !x.active } : x)); log(`${c.active ? 'غیرفعال' : 'فعال'} کردن کد ${c.code}`, c.id); }} className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${c.active && !isExpired ? 'bg-emerald-100 text-emerald-700' : 'bg-cream-100 text-cream-500'}`}>
+                        {isExpired ? 'منقضی' : c.active ? 'فعال' : 'غیرفعال'}
+                      </button>
+                    </td>
+                    <td className="py-2.5 px-3">
+                      <div className="flex gap-1">
+                        <button onClick={() => handleEdit(c)} className="p-1.5 rounded-lg hover:bg-cream-100 text-brand-600"><IconEdit className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => handleDelete(c.id)} className="p-1.5 rounded-lg hover:bg-coral-50 text-coral-500"><IconTrash className="w-3.5 h-3.5" /></button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
       {showForm && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setShowForm(false)}>
-          <div className={`w-full max-w-sm rounded-2xl ${darkMode ? 'bg-[#151b26]' : 'bg-white'} p-6 animate-rise`} onClick={e => e.stopPropagation()}>
-            <h3 className="font-bold mb-3">کد تخفیف جدید</h3>
-            <div className="space-y-2">
-              <input value={form.code} onChange={e => setForm({ ...form, code: e.target.value })} placeholder="کد تخفیف" className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" />
-              <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })} className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none"><option value="percent">درصدی</option><option value="fixed">مبلغ ثابت</option></select>
-              <input type="number" value={form.value} onChange={e => setForm({ ...form, value: +e.target.value })} placeholder="مقدار" className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" />
-              <input type="number" value={form.maxUses} onChange={e => setForm({ ...form, maxUses: +e.target.value })} placeholder="سقف استفاده" className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" />
-              <input type="date" value={form.expiresAt} onChange={e => setForm({ ...form, expiresAt: e.target.value })} className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" />
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => { setShowForm(false); setEditingCode(null); }}>
+          <div className={`w-full max-w-md rounded-2xl ${darkMode ? 'bg-[#151b26]' : 'bg-white'} p-6 animate-rise`} onClick={e => e.stopPropagation()}>
+            <h3 className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-4`}>{editingCode ? 'ویرایش کد تخفیف' : 'ایجاد کد تخفیف جدید'}</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="text-[11px] font-bold text-cream-500 mb-1 block">کد تخفیف</label>
+                <input value={form.code} onChange={e => setForm({ ...form, code: e.target.value.toUpperCase() })} placeholder="مثلاً: WELCOME20" className="w-full rounded-xl border border-cream-300 px-3 py-2.5 text-[12px] outline-none font-mono uppercase" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-bold text-cream-500 mb-1 block">نوع تخفیف</label>
+                  <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })} className="w-full rounded-xl border border-cream-300 px-3 py-2.5 text-[12px] outline-none">
+                    <option value="percent">درصدی (٪)</option>
+                    <option value="fixed">مبلغ ثابت (تومان)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-cream-500 mb-1 block">مقدار {form.type === 'percent' ? '(٪)' : '(تومان)'}</label>
+                  <input type="number" value={form.value} onChange={e => setForm({ ...form, value: +e.target.value })} placeholder="0" className="w-full rounded-xl border border-cream-300 px-3 py-2.5 text-[12px] outline-none" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-bold text-cream-500 mb-1 block">سقف استفاده</label>
+                  <input type="number" value={form.maxUses} onChange={e => setForm({ ...form, maxUses: +e.target.value })} placeholder="100" className="w-full rounded-xl border border-cream-300 px-3 py-2.5 text-[12px] outline-none" />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-cream-500 mb-1 block">تاریخ انقضا</label>
+                  <input type="date" value={form.expiresAt} onChange={e => setForm({ ...form, expiresAt: e.target.value })} className="w-full rounded-xl border border-cream-300 px-3 py-2.5 text-[12px] outline-none" />
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <input type="checkbox" id="active" checked={form.active} onChange={e => setForm({ ...form, active: e.target.checked })} className="w-4 h-4" />
+                <label htmlFor="active" className="text-[12px] font-bold">فعال باشد</label>
+              </div>
             </div>
-            <button onClick={save} className="w-full mt-3 bg-brand-900 text-white py-2 rounded-xl font-bold text-[12px]">ذخیره</button>
+            <div className="flex gap-2 mt-4">
+              <button onClick={save} className="flex-1 bg-brand-900 text-white py-2.5 rounded-xl font-bold text-[12px] shadow-lg shadow-brand-900/25">{editingCode ? 'بروزرسانی' : 'ایجاد کد تخفیف'}</button>
+              <button onClick={() => { setShowForm(false); setEditingCode(null); }} className="px-4 py-2.5 rounded-xl border border-cream-300 text-[12px] font-bold">انصراف</button>
+            </div>
           </div>
         </div>
       )}
@@ -3631,9 +3978,26 @@ function AdminOperations() {
 }
 
 function AdminSystem() {
-  const { roles, audit, loginHistory, errorLog, integrations, darkMode, log, setIsAdmin } = useAdmin();
+  const { roles, setRoles, audit, loginHistory, errorLog, setErrorLog, integrations, setIntegrations, darkMode, log, setIsAdmin } = useAdmin();
   const [tab, setTab] = useState<'roles' | 'audit' | 'security' | 'integrations' | 'backup'>('roles');
+  const [auditFilter, setAuditFilter] = useState<'all' | 'normal' | 'warning' | 'critical'>('all');
+  const [search, setSearch] = useState('');
   const backupRef = useRef<HTMLInputElement>(null);
+
+  const stats = {
+    totalAudit: audit.length,
+    warnings: audit.filter((a: any) => a.severity === 'warning').length,
+    criticals: audit.filter((a: any) => a.severity === 'critical').length,
+    failedLogins: loginHistory.filter((l: any) => !l.success).length,
+    activeErrors: errorLog.filter((e: any) => !e.resolved).length,
+    connectedIntegrations: integrations.filter((i: any) => i.connected).length,
+  };
+
+  const filteredAudit = audit.filter((a: any) => {
+    if (auditFilter !== 'all' && a.severity !== auditFilter) return false;
+    if (search && !a.action.includes(search) && !a.actor.includes(search)) return false;
+    return true;
+  });
 
   const exportBackup = () => {
     const data: Record<string, any> = {};
@@ -3661,48 +4025,247 @@ function AdminSystem() {
     reader.readAsText(file);
   };
 
+  const clearErrors = () => {
+    setErrorLog([]);
+    log('پاک‌سازی خطاهای فنی', 'system');
+  };
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-2 border-b border-cream-300">
-        {[{ k: 'roles', l: 'نقش‌ها' }, { k: 'audit', l: 'لاگ رویدادها' }, { k: 'security', l: 'ورودها و خطاها' }, { k: 'integrations', l: 'یکپارچگی‌ها' }, { k: 'backup', l: 'پشتیبان‌گیری' }].map(t => (
-          <button key={t.k} onClick={() => setTab(t.k as any)} className={`pb-2 text-[12px] font-bold border-b-2 ${tab === t.k ? 'border-brand-900 text-brand-900' : 'border-transparent text-cream-500'}`}>{t.l}</button>
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
+        {[
+          { l: 'کل رویدادها', v: faNum(stats.totalAudit), c: 'bg-blue-50 text-blue-700', icon: <IconClipboard className="w-5 h-5" /> },
+          { l: 'هشدارها', v: faNum(stats.warnings), c: 'bg-amber-50 text-amber-700', icon: <IconAlert className="w-5 h-5" /> },
+          { l: 'بحرانی', v: faNum(stats.criticals), c: 'bg-coral-50 text-coral-700', icon: <IconAlert className="w-5 h-5" /> },
+          { l: 'ورود ناموفق', v: faNum(stats.failedLogins), c: 'bg-purple-50 text-purple-700', icon: <IconLock className="w-5 h-5" /> },
+          { l: 'خطاهای فعال', v: faNum(stats.activeErrors), c: 'bg-coral-50 text-coral-700', icon: <IconAlert className="w-5 h-5" /> },
+          { l: 'یکپارچگی‌ها', v: faNum(stats.connectedIntegrations), c: 'bg-emerald-50 text-emerald-700', icon: <IconLink className="w-5 h-5" /> },
+        ].map((k, i) => (
+          <div key={i} className={`rounded-xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-4`}>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[10px] text-cream-500">{k.l}</p>
+              <div className={k.c + ' p-1.5 rounded-lg'}>{k.icon}</div>
+            </div>
+            <p className={`text-lg font-extrabold tnum ${darkMode ? 'text-white' : 'text-brand-900'}`}>{k.v}</p>
+          </div>
         ))}
       </div>
+
+      {/* Tabs */}
+      <div className="flex flex-wrap gap-2 border-b border-cream-300">
+        {[
+          { k: 'roles', l: 'نقش‌ها و دسترسی‌ها', icon: <IconUsers className="w-4 h-4" /> },
+          { k: 'audit', l: 'لاگ رویدادها', icon: <IconClipboard className="w-4 h-4" /> },
+          { k: 'security', l: 'امنیت و ورودها', icon: <IconShield className="w-4 h-4" /> },
+          { k: 'integrations', l: 'یکپارچگی‌ها', icon: <IconLink className="w-4 h-4" /> },
+          { k: 'backup', l: 'پشتیبان‌گیری', icon: <IconDownload className="w-4 h-4" /> }
+        ].map(t => (
+          <button key={t.k} onClick={() => setTab(t.k as any)} className={`pb-2 px-3 flex items-center gap-1.5 text-[12px] font-bold border-b-2 transition-colors ${tab === t.k ? 'border-brand-900 text-brand-900' : 'border-transparent text-cream-500 hover:text-brand-700'}`}>
+            {t.icon}{t.l}
+          </button>
+        ))}
+      </div>
+
+      {/* Roles Tab */}
       {tab === 'roles' && (
-        <div className="space-y-2">{roles.map((r: any) => (<div key={r.id} className={`rounded-xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-3 flex items-center justify-between`}><div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full" style={{ background: r.color }} /><span className="text-[12px] font-bold">{r.name}</span></div><span className="text-[10px] text-cream-500">{faNum(r.sections.length)} بخش</span></div>))}</div>
-      )}
-      {tab === 'audit' && (
-        <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-4`}>
-          <div className="flex justify-between items-center mb-3"><h3 className="text-sm font-bold">لاگ رویدادها</h3><div className="flex gap-2"><button onClick={() => downloadFile(toExcel(audit.map((a: any) => ({ 'رویداد': a.action, 'کاربر': a.actor, 'نقش': a.role, 'هدف': a.target, 'شدت': a.severity, 'تاریخ': dayLabel(new Date(a.at)) })), 'لاگ رویدادها'), 'audit-log.xls', 'application/vnd.ms-excel')} className="flex items-center gap-1 px-2 py-1 rounded-lg border border-cream-300 text-[10px] font-bold"><IconDownload className="w-3 h-3" />اکسل</button><button onClick={() => downloadFile(JSON.stringify(audit, null, 2), 'audit-log.json', 'application/json')} className="flex items-center gap-1 px-2 py-1 rounded-lg border border-cream-300 text-[10px] font-bold"><IconDownload className="w-3 h-3" />JSON</button></div></div>
-          <div className="space-y-1 max-h-64 overflow-y-auto">{audit.slice(0, 20).map((a: any) => (<div key={a.id} className="flex items-center justify-between text-[11px] py-1 border-b border-cream-100"><span>{a.action}</span><span className="text-cream-500">{dayLabel(new Date(a.at))}</span></div>))}</div>
+        <div className="space-y-4">
+          <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
+            <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-4`}>نقش‌های سیستمی</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {roles.map((r: any) => (
+                <div key={r.id} className={`rounded-xl border-2 ${darkMode ? 'border-white/10 bg-[#1a212c]' : 'border-cream-200 bg-cream-50'} p-4 hover:shadow-lg transition-all`}>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: r.color }}>
+                        <IconUsers className="w-5 h-5 text-white" />
+                      </div>
+                      <div>
+                        <p className={`text-[13px] font-bold ${darkMode ? 'text-white' : 'text-brand-900'}`}>{r.name}</p>
+                        <p className="text-[10px] text-cream-500">{faNum(r.sections.length)} بخش قابل دسترسی</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {r.sections.slice(0, 5).map((s: string) => (
+                      <span key={s} className="text-[9px] bg-white rounded-full px-2 py-0.5 text-brand-700">{s}</span>
+                    ))}
+                    {r.sections.length > 5 && <span className="text-[9px] bg-white rounded-full px-2 py-0.5 text-brand-700">+{faNum(r.sections.length - 5)}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
+
+      {/* Audit Tab */}
+      {tab === 'audit' && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-2">
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="جستجو در رویدادها..." className="flex-1 min-w-[200px] rounded-xl border border-cream-300 bg-white px-3 py-2 text-[12px] outline-none" />
+            <select value={auditFilter} onChange={e => setAuditFilter(e.target.value as any)} className="rounded-xl border border-cream-300 bg-white px-3 py-2 text-[12px] outline-none">
+              <option value="all">همه شدت‌ها</option>
+              <option value="normal">عادی</option>
+              <option value="warning">هشدار</option>
+              <option value="critical">بحرانی</option>
+            </select>
+            <button onClick={() => downloadFile(toExcel(filteredAudit.map((a: any) => ({ 'رویداد': a.action, 'کاربر': a.actor, 'نقش': a.role, 'هدف': a.target, 'شدت': a.severity, 'تاریخ': dayLabel(new Date(a.at)) })), 'لاگ رویدادها'), 'audit-log.xls', 'application/vnd.ms-excel')} className="flex items-center gap-1 px-3 py-2 rounded-xl border border-cream-300 text-[11px] font-bold"><IconDownload className="w-3.5 h-3.5" />خروجی اکسل</button>
+          </div>
+          <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} overflow-hidden`}>
+            <div className="overflow-x-auto">
+              <table className="w-full text-[12px]">
+                <thead>
+                  <tr className={`border-y ${darkMode ? 'border-white/10 bg-white/5' : 'border-cream-300 bg-cream-100/70'}`}>
+                    <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">رویداد</th>
+                    <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">کاربر</th>
+                    <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">نقش</th>
+                    <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">هدف</th>
+                    <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">شدت</th>
+                    <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">تاریخ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredAudit.slice(0, 50).map((a: any) => (
+                    <tr key={a.id} className={`border-b ${darkMode ? 'border-white/5 hover:bg-white/5' : 'border-cream-100 hover:bg-brand-50/40'} transition-colors`}>
+                      <td className="py-2.5 px-3 font-bold">{a.action}</td>
+                      <td className="py-2.5 px-3">{a.actor}</td>
+                      <td className="py-2.5 px-3 text-[11px]">{a.role}</td>
+                      <td className="py-2.5 px-3 text-[11px] font-mono">{a.target}</td>
+                      <td className="py-2.5 px-3">
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${a.severity === 'critical' ? 'bg-coral-100 text-coral-700' : a.severity === 'warning' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                          {a.severity === 'critical' ? 'بحرانی' : a.severity === 'warning' ? 'هشدار' : 'عادی'}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 text-[11px] text-cream-500">{dayLabel(new Date(a.at))}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Security Tab */}
       {tab === 'security' && (
         <div className="space-y-4">
-          <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-4`}>
-            <h3 className="text-sm font-bold mb-2">تاریخچه ورود</h3>
-            {loginHistory.map((l: any) => (<div key={l.id} className="flex items-center justify-between text-[11px] py-1.5 border-b border-cream-100"><span>{l.user} ({l.role})</span><span className={`${l.success ? 'text-emerald-600' : 'text-coral-600'}`}>{l.success ? 'موفق' : 'ناموفق'}</span></div>))}
+          <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
+            <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-4`}>تاریخچه ورود کاربران</h3>
+            <div className="space-y-2">
+              {loginHistory.map((l: any) => (
+                <div key={l.id} className={`flex items-center justify-between p-3 rounded-xl ${darkMode ? 'bg-[#1a212c]' : 'bg-cream-50'}`}>
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${l.success ? 'bg-emerald-100' : 'bg-coral-100'}`}>
+                      <IconUser className={`w-5 h-5 ${l.success ? 'text-emerald-700' : 'text-coral-700'}`} />
+                    </div>
+                    <div>
+                      <p className={`text-[12px] font-bold ${darkMode ? 'text-white' : 'text-brand-900'}`}>{l.user}</p>
+                      <p className="text-[10px] text-cream-500">{l.role} | {l.ip} | {l.browser}</p>
+                    </div>
+                  </div>
+                  <div className="text-left">
+                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${l.success ? 'bg-emerald-100 text-emerald-700' : 'bg-coral-100 text-coral-700'}`}>
+                      {l.success ? 'موفق' : 'ناموفق'}
+                    </span>
+                    <p className="text-[10px] text-cream-500 mt-1">{dayLabel(new Date(l.time))}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
-          <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-4`}>
-            <h3 className="text-sm font-bold mb-2">خطاهای فنی</h3>
-            {errorLog.map((e: any) => (<div key={e.id} className="flex items-center justify-between text-[11px] py-1.5 border-b border-cream-100"><span>{e.message}</span><span className={e.resolved ? 'text-emerald-600' : 'text-coral-600'}>{e.resolved ? 'حل شده' : 'فعال'}</span></div>))}
+
+          <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'}`}>خطاهای فنی</h3>
+              {errorLog.length > 0 && (
+                <button onClick={clearErrors} className="px-3 py-1.5 rounded-xl bg-coral-100 text-coral-700 text-[11px] font-bold">پاک‌سازی همه</button>
+              )}
+            </div>
+            {errorLog.length === 0 ? (
+              <p className="text-[12px] text-cream-500 text-center py-8">هیچ خطای فنی ثبت نشده است</p>
+            ) : (
+              <div className="space-y-2">
+                {errorLog.map((e: any) => (
+                  <div key={e.id} className={`flex items-center justify-between p-3 rounded-xl ${e.resolved ? (darkMode ? 'bg-[#1a212c]' : 'bg-cream-50') : 'bg-coral-50 border border-coral-200'}`}>
+                    <div className="flex items-center gap-3">
+                      <IconAlert className={`w-5 h-5 ${e.resolved ? 'text-cream-500' : 'text-coral-600'}`} />
+                      <div>
+                        <p className={`text-[12px] font-bold ${darkMode ? 'text-white' : 'text-brand-900'}`}>{e.message}</p>
+                        <p className="text-[10px] text-cream-500">{dayLabel(new Date(e.time))}</p>
+                      </div>
+                    </div>
+                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${e.resolved ? 'bg-emerald-100 text-emerald-700' : 'bg-coral-100 text-coral-700'}`}>
+                      {e.resolved ? 'حل شده' : 'فعال'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
+
+      {/* Integrations Tab */}
       {tab === 'integrations' && (
-        <div className="space-y-2">{integrations.map((i: any) => (<div key={i.id} className={`rounded-xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-3 flex items-center justify-between`}><div><span className="text-[12px] font-bold">{i.name}</span><span className="text-[10px] text-cream-500 ms-2">({i.type})</span></div><button className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${i.connected ? 'bg-emerald-100 text-emerald-700' : 'bg-cream-100 text-cream-500'}`}>{i.connected ? 'متصل' : 'قطع'}</button></div>))}</div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {integrations.map((i: any) => (
+            <div key={i.id} className={`rounded-2xl border-2 ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-200 bg-white'} p-5 hover:shadow-lg transition-all`}>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${i.connected ? 'bg-emerald-100' : 'bg-cream-100'}`}>
+                    <IconLink className={`w-6 h-6 ${i.connected ? 'text-emerald-700' : 'text-cream-500'}`} />
+                  </div>
+                  <div>
+                    <p className={`text-[13px] font-bold ${darkMode ? 'text-white' : 'text-brand-900'}`}>{i.name}</p>
+                    <p className="text-[10px] text-cream-500">{i.type === 'payment' ? 'درگاه پرداخت' : 'سرویس ارسال'}</p>
+                  </div>
+                </div>
+                <button onClick={() => { setIntegrations(integrations.map((x: any) => x.id === i.id ? { ...x, connected: !x.connected } : x)); log(`${i.connected ? 'قطع' : 'اتصال'} ${i.name}`, i.id); }} className={`px-3 py-1.5 rounded-xl text-[11px] font-bold ${i.connected ? 'bg-emerald-100 text-emerald-700' : 'bg-cream-100 text-cream-500'}`}>
+                  {i.connected ? 'متصل' : 'قطع'}
+                </button>
+              </div>
+              <div className={`rounded-lg ${darkMode ? 'bg-[#1a212c]' : 'bg-cream-50'} p-3`}>
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-cream-500">تعداد تراکنش:</span>
+                  <span className="tnum font-bold">{faNum(i.txCount)}</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
       )}
+
+      {/* Backup Tab */}
       {tab === 'backup' && (
-        <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5 space-y-4`}>
-          <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'}`}>پشتیبان‌گیری و بازیابی</h3>
-          <p className="text-[11px] text-cream-500">تمام داده‌های فروشگاه در localStorage مرورگر ذخیره می‌شوند. با پشتیبان‌گیری می‌توانید داده‌ها را به فایل JSON صادر و در صورت نیاز بازیابی کنید.</p>
-          <div className="flex flex-wrap gap-3">
-            <button onClick={exportBackup} className="flex items-center gap-2 bg-brand-900 text-white px-4 py-2.5 rounded-xl text-[12px] font-bold"><IconDownload className="w-4 h-4" />دانلود فایل پشتیبان</button>
-            <input ref={backupRef} type="file" accept=".json" onChange={importBackup} className="hidden" />
-            <button onClick={() => backupRef.current?.click()} className="flex items-center gap-2 border border-cream-300 px-4 py-2.5 rounded-xl text-[12px] font-bold"><IconUpload className="w-4 h-4" />بازیابی از فایل</button>
+        <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-6 space-y-4`}>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-12 h-12 rounded-xl bg-brand-100 flex items-center justify-center">
+              <IconDownload className="w-6 h-6 text-brand-700" />
+            </div>
+            <div>
+              <h3 className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-brand-900'}`}>پشتیبان‌گیری و بازیابی</h3>
+              <p className="text-[11px] text-cream-500">مدیریت کامل داده‌های فروشگاه</p>
+            </div>
           </div>
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
-            <p className="text-[11px] font-bold text-amber-700">توجه: داده‌ها در localStorage نگهداری می‌شوند و با پاک کردن حافظه مرورگر حذف خواهند شد.</p>
+          <p className="text-[12px] text-brand-700 leading-6">تمام داده‌های فروشگاه در localStorage مرورگر ذخیره می‌شوند. با پشتیبان‌گیری می‌توانید داده‌ها را به فایل JSON صادر و در صورت نیاز بازیابی کنید.</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <button onClick={exportBackup} className="flex items-center justify-center gap-2 bg-brand-900 text-white px-4 py-3 rounded-xl text-[12px] font-bold shadow-lg shadow-brand-900/25 hover:bg-brand-950 transition-colors">
+              <IconDownload className="w-5 h-5" />دانلود فایل پشتیبان
+            </button>
+            <input ref={backupRef} type="file" accept=".json" onChange={importBackup} className="hidden" />
+            <button onClick={() => backupRef.current?.click()} className="flex items-center justify-center gap-2 border-2 border-brand-900 text-brand-900 px-4 py-3 rounded-xl text-[12px] font-bold hover:bg-brand-50 transition-colors">
+              <IconUpload className="w-5 h-5" />بازیابی از فایل
+            </button>
+          </div>
+          <div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-4">
+            <div className="flex items-start gap-3">
+              <IconAlert className="w-5 h-5 text-amber-700 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-[12px] font-bold text-amber-700 mb-1">توجه مهم</p>
+                <p className="text-[11px] text-amber-600 leading-5">داده‌ها در localStorage نگهداری می‌شوند و با پاک کردن حافظه مرورگر حذف خواهند شد. توصیه می‌شود به صورت دوره‌ای پشتیبان‌گیری کنید.</p>
+              </div>
+            </div>
           </div>
         </div>
       )}
