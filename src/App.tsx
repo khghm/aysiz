@@ -1385,6 +1385,339 @@ function AdminReports() {
   );
 }
 
+function AdminInvoices() {
+  const { orders, invoices, setInvoices, darkMode, log } = useAdmin();
+  const { settings } = useShop();
+  const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+
+  const filtered = invoices.filter((inv: any) => {
+    if (statusFilter !== 'all' && inv.status !== statusFilter) return false;
+    if (search && !inv.number.includes(search) && !inv.customer.includes(search)) return false;
+    return true;
+  });
+
+  const printInvoice = (inv: any) => {
+    const order = orders.find((o: any) => o.id === inv.orderId);
+    const printWindow = window.open('', '', 'width=800,height=600');
+    if (!printWindow) return;
+
+    const html = `
+<!DOCTYPE html>
+<html dir="rtl" lang="fa">
+<head>
+<meta charset="UTF-8">
+<title>فاکتور ${inv.number}</title>
+<style>
+  @page { size: A4; margin: 15mm; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Vazirmatn', Tahoma, sans-serif; direction: rtl; background: #fff; color: #1A2238; padding: 20px; }
+  .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #1A2238; padding-bottom: 20px; margin-bottom: 30px; }
+  .logo-section { flex: 1; }
+  .logo { font-size: 32px; font-weight: bold; color: #1A2238; margin-bottom: 8px; }
+  .store-info { font-size: 11px; color: #666; line-height: 1.8; }
+  .invoice-info { text-align: left; }
+  .invoice-title { font-size: 24px; font-weight: bold; color: #1A2238; margin-bottom: 10px; }
+  .invoice-number { font-size: 14px; color: #666; margin-bottom: 5px; }
+  .invoice-date { font-size: 12px; color: #666; }
+  .customer-section { background: #f9f6eb; padding: 20px; border-radius: 8px; margin-bottom: 30px; }
+  .customer-title { font-size: 13px; font-weight: bold; color: #1A2238; margin-bottom: 12px; }
+  .customer-info { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 12px; }
+  .customer-info div { display: flex; gap: 8px; }
+  .customer-info strong { color: #1A2238; min-width: 80px; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+  thead { background: linear-gradient(135deg, #1A2238 0%, #2d4a85 100%); color: white; }
+  th { padding: 12px 8px; text-align: right; font-size: 11px; font-weight: bold; }
+  td { padding: 10px 8px; border-bottom: 1px solid #e8e1cc; font-size: 12px; text-align: right; }
+  tbody tr:nth-child(even) { background: #f9f6eb; }
+  .text-left { text-align: left; }
+  .totals { margin-top: 20px; }
+  .total-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 13px; border-bottom: 1px solid #e8e1cc; }
+  .total-row.final { font-size: 16px; font-weight: bold; color: #1A2238; border-top: 2px solid #1A2238; border-bottom: none; margin-top: 10px; padding-top: 15px; }
+  .footer { margin-top: 40px; padding-top: 20px; border-top: 2px solid #1A2238; text-align: center; font-size: 11px; color: #666; line-height: 1.8; }
+  .badge { display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 10px; font-weight: bold; }
+  .badge-paid { background: #d1fae5; color: #065f46; }
+  .badge-pending { background: #fef3c7; color: #92400e; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo-section">
+      <div class="logo">فروشگاه اینترنتی پوشاک تاسیز</div>
+      <div class="store-info">
+        <div>تلفن: ${settings.phone}</div>
+        <div>ایمیل: ${settings.email}</div>
+        <div>آدرس: ${settings.address}</div>
+      </div>
+    </div>
+    <div class="invoice-info">
+      <div class="invoice-title">فاکتور فروش</div>
+      <div class="invoice-number">شماره فاکتور: ${inv.number}</div>
+      <div class="invoice-date">تاریخ: ${faDateFull(new Date(inv.date))}</div>
+      <div style="margin-top: 8px;"><span class="badge ${inv.status === 'paid' ? 'badge-paid' : 'badge-pending'}">${inv.status === 'paid' ? 'پرداخت شده' : 'در انتظار پرداخت'}</span></div>
+    </div>
+  </div>
+
+  <div class="customer-section">
+    <div class="customer-title">مشخصات مشتری</div>
+    <div class="customer-info">
+      <div><strong>نام:</strong> <span>${inv.customer}</span></div>
+      <div><strong>موبایل:</strong> <span>${order?.mobile || '-'}</span></div>
+      <div><strong>شهر:</strong> <span>${order?.city || '-'}</span></div>
+      <div><strong>آدرس:</strong> <span>${order?.address || '-'}</span></div>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>ردیف</th>
+        <th>شرح کالا</th>
+        <th>تعداد</th>
+        <th>قیمت واحد (تومان)</th>
+        <th>تخفیف (٪)</th>
+        <th>قیمت نهایی (تومان)</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${order?.items?.map((item: any, idx: number) => {
+        const finalPrice = item.price * (1 - item.discount / 100);
+        const totalPrice = finalPrice * item.qty;
+        return `
+          <tr>
+            <td>${faNum(idx + 1)}</td>
+            <td>${item.name}</td>
+            <td class="text-left">${faNum(item.qty)}</td>
+            <td class="text-left">${formatPrice(item.price)}</td>
+            <td class="text-left">${faNum(item.discount)}٪</td>
+            <td class="text-left">${formatPrice(totalPrice)}</td>
+          </tr>
+        `;
+      }).join('') || ''}
+    </tbody>
+  </table>
+
+  <div class="totals">
+    <div class="total-row">
+      <span>جمع کل کالاها:</span>
+      <span>${formatPrice(order?.subtotal || 0)} تومان</span>
+    </div>
+    <div class="total-row">
+      <span>تخفیف:</span>
+      <span>${formatPrice(order?.discountAmount || 0)} تومان</span>
+    </div>
+    <div class="total-row">
+      <span>هزینه ارسال:</span>
+      <span>${formatPrice(order?.shipping || 0)} تومان</span>
+    </div>
+    <div class="total-row">
+      <span>مالیات و عوارض:</span>
+      <span>${formatPrice(order?.tax || 0)} تومان</span>
+    </div>
+    <div class="total-row final">
+      <span>مبلغ قابل پرداخت:</span>
+      <span>${formatPrice(order?.total || 0)} تومان</span>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div>از خرید شما متشکریم | فروشگاه اینترنتی پوشاک تاسیز</div>
+    <div>این فاکتور معتبر و مورد تأیید می‌باشد</div>
+  </div>
+
+  <script>
+    window.onload = function() {
+      window.print();
+    }
+  </script>
+</body>
+</html>`;
+
+    printWindow.document.write(html);
+    printWindow.document.close();
+    log(`چاپ فاکتور ${inv.number}`, inv.id);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-2 items-center">
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="جستجو شماره فاکتور یا نام مشتری..." className="flex-1 min-w-[200px] rounded-xl border border-cream-300 bg-white px-3 py-2 text-[12px] outline-none" />
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="rounded-xl border border-cream-300 bg-white px-3 py-2 text-[12px] outline-none">
+          <option value="all">همه وضعیت‌ها</option>
+          <option value="paid">پرداخت شده</option>
+          <option value="pending">در انتظار</option>
+        </select>
+      </div>
+
+      <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} overflow-hidden`}>
+        <div className="overflow-x-auto">
+          <table className="w-full text-[12px]">
+            <thead>
+              <tr className={`border-y ${darkMode ? 'border-white/10 bg-white/5' : 'border-cream-300 bg-cream-100/70'}`}>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">شماره فاکتور</th>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">مشتری</th>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">مبلغ</th>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">تاریخ</th>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">وضعیت</th>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">عملیات</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((inv: any) => (
+                <tr key={inv.id} className={`border-b ${darkMode ? 'border-white/5 hover:bg-white/5' : 'border-cream-100 hover:bg-brand-50/40'} transition-colors`}>
+                  <td className="py-2.5 px-3 font-bold">{inv.number}</td>
+                  <td className="py-2.5 px-3">{inv.customer}</td>
+                  <td className="py-2.5 px-3 tnum">{formatPrice(inv.amount)}</td>
+                  <td className="py-2.5 px-3 text-[11px] text-cream-500">{dayLabel(new Date(inv.date))}</td>
+                  <td className="py-2.5 px-3">
+                    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10.5px] font-bold ${inv.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                      <span className={`h-1.5 w-1.5 rounded-full ${inv.status === 'paid' ? 'bg-emerald-600' : 'bg-amber-600'}`}></span>
+                      {inv.status === 'paid' ? 'پرداخت شده' : 'در انتظار'}
+                    </span>
+                  </td>
+                  <td className="py-2.5 px-3">
+                    <div className="flex gap-1">
+                      <button onClick={() => setSelectedInvoice(inv)} className="p-1.5 rounded-lg hover:bg-cream-100 text-brand-600" title="مشاهده">
+                        <IconEye className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => printInvoice(inv)} className="p-1.5 rounded-lg hover:bg-cream-100 text-brand-600" title="چاپ">
+                        <IconPrint className="w-4 h-4" />
+                      </button>
+                      {inv.status !== 'paid' && (
+                        <button onClick={() => { setInvoices(invoices.map((x: any) => x.id === inv.id ? { ...x, status: 'paid' } : x)); log(`تسویه فاکتور ${inv.number}`, inv.id); }} className="p-1.5 rounded-lg hover:bg-emerald-50 text-emerald-600" title="تسویه">
+                          <IconCheck className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {selectedInvoice && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setSelectedInvoice(null)}>
+          <div className={`w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl ${darkMode ? 'bg-[#151b26]' : 'bg-white'} p-6 animate-rise`} onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-brand-900'}`}>فاکتور {selectedInvoice.number}</h3>
+              <button onClick={() => setSelectedInvoice(null)}><IconX className="w-5 h-5" /></button>
+            </div>
+            <InvoicePreview invoice={selectedInvoice} />
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => printInvoice(selectedInvoice)} className="flex-1 bg-brand-900 text-white py-2.5 rounded-xl font-bold text-[12px] flex items-center justify-center gap-2">
+                <IconPrint className="w-4 h-4" /> چاپ فاکتور
+              </button>
+              {selectedInvoice.status !== 'paid' && (
+                <button onClick={() => { setInvoices(invoices.map((x: any) => x.id === selectedInvoice.id ? { ...x, status: 'paid' } : x)); setSelectedInvoice(null); log(`تسویه فاکتور ${selectedInvoice.number}`, selectedInvoice.id); }} className="px-4 py-2.5 rounded-xl border border-cream-300 text-[12px] font-bold">
+                  تسویه فاکتور
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InvoicePreview({ invoice }: { invoice: any }) {
+  const { orders } = useAdmin();
+  const { settings } = useShop();
+  const order = orders.find((o: any) => o.id === invoice.orderId);
+
+  return (
+    <div className="border border-cream-300 rounded-xl p-6 bg-white">
+      <div className="flex justify-between items-start border-b-2 border-brand-900 pb-4 mb-6">
+        <div>
+          <h2 className="text-xl font-bold text-brand-900 mb-2">فروشگاه اینترنتی پوشاک تاسیز</h2>
+          <div className="text-[11px] text-cream-500 space-y-1">
+            <p>تلفن: {settings.phone}</p>
+            <p>ایمیل: {settings.email}</p>
+            <p>آدرس: {settings.address}</p>
+          </div>
+        </div>
+        <div className="text-left">
+          <h3 className="text-lg font-bold text-brand-900 mb-2">فاکتور فروش</h3>
+          <p className="text-[12px] text-cream-500">شماره: {invoice.number}</p>
+          <p className="text-[12px] text-cream-500">تاریخ: {faDateFull(new Date(invoice.date))}</p>
+          <span className={`inline-block mt-2 px-3 py-1 rounded-full text-[10px] font-bold ${invoice.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+            {invoice.status === 'paid' ? 'پرداخت شده' : 'در انتظار پرداخت'}
+          </span>
+        </div>
+      </div>
+
+      <div className="bg-cream-50 rounded-xl p-4 mb-6">
+        <h4 className="text-[12px] font-bold text-brand-900 mb-2">مشخصات مشتری</h4>
+        <div className="grid grid-cols-2 gap-2 text-[11px]">
+          <div><span className="text-cream-500">نام: </span>{invoice.customer}</div>
+          <div><span className="text-cream-500">موبایل: </span>{order?.mobile || '-'}</div>
+          <div><span className="text-cream-500">شهر: </span>{order?.city || '-'}</div>
+          <div><span className="text-cream-500">آدرس: </span>{order?.address || '-'}</div>
+        </div>
+      </div>
+
+      <table className="w-full text-[11px] mb-6">
+        <thead>
+          <tr className="bg-brand-900 text-white">
+            <th className="py-2 px-2 text-right">ردیف</th>
+            <th className="py-2 px-2 text-right">شرح کالا</th>
+            <th className="py-2 px-2 text-right">تعداد</th>
+            <th className="py-2 px-2 text-right">قیمت واحد</th>
+            <th className="py-2 px-2 text-right">تخفیف</th>
+            <th className="py-2 px-2 text-right">قیمت نهایی</th>
+          </tr>
+        </thead>
+        <tbody>
+          {order?.items?.map((item: any, idx: number) => {
+            const finalPrice = item.price * (1 - item.discount / 100);
+            const totalPrice = finalPrice * item.qty;
+            return (
+              <tr key={idx} className={idx % 2 === 0 ? 'bg-cream-50' : 'bg-white'}>
+                <td className="py-2 px-2">{faNum(idx + 1)}</td>
+                <td className="py-2 px-2">{item.name}</td>
+                <td className="py-2 px-2 tnum">{faNum(item.qty)}</td>
+                <td className="py-2 px-2 tnum">{formatPrice(item.price)}</td>
+                <td className="py-2 px-2 tnum">{faNum(item.discount)}٪</td>
+                <td className="py-2 px-2 tnum font-bold">{formatPrice(totalPrice)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+
+      <div className="space-y-2 text-[12px]">
+        <div className="flex justify-between py-1 border-b border-cream-200">
+          <span>جمع کل:</span>
+          <span className="tnum">{formatPrice(order?.subtotal || 0)} تومان</span>
+        </div>
+        <div className="flex justify-between py-1 border-b border-cream-200">
+          <span>تخفیف:</span>
+          <span className="tnum text-coral-600">-{formatPrice(order?.discountAmount || 0)} تومان</span>
+        </div>
+        <div className="flex justify-between py-1 border-b border-cream-200">
+          <span>هزینه ارسال:</span>
+          <span className="tnum">{formatPrice(order?.shipping || 0)} تومان</span>
+        </div>
+        <div className="flex justify-between py-1 border-b border-cream-200">
+          <span>مالیات و عوارض:</span>
+          <span className="tnum">{formatPrice(order?.tax || 0)} تومان</span>
+        </div>
+        <div className="flex justify-between py-2 font-bold text-[14px] text-brand-900 border-t-2 border-brand-900 mt-2">
+          <span>مبلغ قابل پرداخت:</span>
+          <span className="tnum">{formatPrice(order?.total || 0)} تومان</span>
+        </div>
+      </div>
+
+      <div className="mt-6 pt-4 border-t-2 border-brand-900 text-center text-[11px] text-cream-500">
+        <p>از خرید شما متشکریم | فروشگاه اینترنتی پوشاک تاسیز</p>
+      </div>
+    </div>
+  );
+}
+
 function AdminFinance() {
   const { orders, invoices, setInvoices, expenses, setExpenses, bankTx, darkMode, log } = useAdmin();
   const { settings } = useShop();
@@ -1431,14 +1764,7 @@ function AdminFinance() {
           </div>
         </div>
       )}
-      {tab === 'invoices' && (
-        <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
-          <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-3`}>فاکتورها</h3>
-          <table className="w-full text-[12px]"><thead><tr className={`border-y ${darkMode ? 'border-white/10 bg-white/5' : 'border-cream-300 bg-cream-100/70'}`}><th className="text-start py-2 px-2 font-bold text-cream-500">شماره</th><th className="text-start py-2 px-2 font-bold text-cream-500">مشتری</th><th className="text-start py-2 px-2 font-bold text-cream-500">مبلغ</th><th className="text-start py-2 px-2 font-bold text-cream-500">وضعیت</th><th className="text-start py-2 px-2 font-bold text-cream-500">عملیات</th></tr></thead>
-            <tbody>{invoices.map((inv: any) => (<tr key={inv.id} className={`border-b ${darkMode ? 'border-white/5' : 'border-cream-100'}`}><td className="py-2 px-2 font-bold">{inv.number}</td><td className="py-2 px-2">{inv.customer}</td><td className="py-2 px-2 tnum">{formatPrice(inv.amount)}</td><td className="py-2 px-2"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${inv.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{inv.status === 'paid' ? 'پرداخت‌شده' : 'در انتظار'}</span></td><td className="py-2 px-2">{inv.status !== 'paid' && <button onClick={() => { setInvoices(invoices.map((x: any) => x.id === inv.id ? { ...x, status: 'paid' } : x)); log(`تسویه فاکتور ${inv.number}`, inv.id); }} className="text-[10px] font-bold text-emerald-600">تسویه</button>}</td></tr>))}</tbody>
-          </table>
-        </div>
-      )}
+      {tab === 'invoices' && <AdminInvoices />}
       {tab === 'expenses' && (
         <div className="space-y-4">
           <button onClick={() => setShowExpense(true)} className="bg-brand-900 text-white px-4 py-2 rounded-xl text-[12px] font-bold flex items-center gap-1"><IconPlus className="w-4 h-4" />ثبت هزینه جدید</button>
@@ -1495,18 +1821,213 @@ function AdminFinance() {
 }
 
 function AdminCustomers() {
-  const { orders, darkMode } = useAdmin();
+  const { orders, darkMode, log } = useAdmin();
   const customers = aggregateCustomers(orders);
   const [search, setSearch] = useState('');
-  const filtered = customers.filter(c => !search || c.name.includes(search) || c.mobile.includes(search) || c.city.includes(search));
+  const [segmentFilter, setSegmentFilter] = useState('all');
+  const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
+  const [notes, setNotes] = useState<Record<string, string[]>>({});
+  const [newNote, setNewNote] = useState('');
+
+  const filtered = customers.filter(c => {
+    if (segmentFilter !== 'all' && c.segment !== segmentFilter) return false;
+    if (search && !c.name.includes(search) && !c.mobile.includes(search) && !c.city.includes(search)) return false;
+    return true;
+  });
+
+  const segments = {
+    all: customers.length,
+    'VIP': customers.filter(c => c.segment === 'VIP').length,
+    'وفادار': customers.filter(c => c.segment === 'وفادار').length,
+    'جدید': customers.filter(c => c.segment === 'جدید').length,
+  };
+
+  const totalRevenue = customers.reduce((s, c) => s + c.totalSpent, 0);
+  const avgOrderValue = customers.length ? totalRevenue / customers.reduce((s, c) => s + c.orders, 0) : 0;
+
+  const exportCustomers = () => {
+    const data = filtered.map(c => ({
+      'نام': c.name,
+      'موبایل': c.mobile,
+      'شهر': c.city,
+      'تعداد سفارش': c.orders,
+      'مجموع خرید (تومان)': c.totalSpent,
+      'امتیاز وفاداری': c.loyalty,
+      'دسته': c.segment,
+      'آخرین خرید': dayLabel(new Date(c.lastOrder))
+    }));
+    downloadFile(toExcel(data, 'گزارش مشتریان'), 'customers.xls', 'application/vnd.ms-excel');
+    log('خروجی گزارش مشتریان', 'customers');
+  };
+
+  const addNote = (customerId: string) => {
+    if (!newNote.trim()) return;
+    setNotes({ ...notes, [customerId]: [...(notes[customerId] || []), newNote] });
+    setNewNote('');
+    log('افزودن یادداشت مشتری', customerId);
+  };
+
+  const customerOrders = selectedCustomer ? orders.filter((o: any) => o.mobile === selectedCustomer.mobile) : [];
+
   return (
     <div className="space-y-4">
-      <input value={search} onChange={e => setSearch(e.target.value)} placeholder="جستجو نام، موبایل، شهر..." className="w-full max-w-md rounded-xl border border-cream-300 bg-white px-3 py-2 text-[12px] outline-none" />
-      <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} overflow-hidden`}>
-        <table className="w-full text-[12px]"><thead><tr className={`border-y ${darkMode ? 'border-white/10 bg-white/5' : 'border-cream-300 bg-cream-100/70'}`}><th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">نام</th><th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">شهر</th><th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">سفارش‌ها</th><th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">مجموع خرید</th><th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">دسته</th></tr></thead>
-          <tbody>{filtered.map(c => (<tr key={c.id} className={`border-b ${darkMode ? 'border-white/5 hover:bg-white/5' : 'border-cream-100 hover:bg-brand-50/40'}`}><td className="py-2 px-3 font-bold">{c.name}</td><td className="py-2 px-3">{c.city}</td><td className="py-2 px-3 tnum">{faNum(c.orders)}</td><td className="py-2 px-3 tnum">{formatPrice(c.totalSpent)}</td><td className="py-2 px-3"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${c.segment === 'VIP' ? 'bg-purple-100 text-purple-700' : c.segment === 'وفادار' ? 'bg-emerald-100 text-emerald-700' : 'bg-cream-100 text-brand-700'}`}>{c.segment}</span></td></tr>))}</tbody>
-        </table>
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[
+          { l: 'کل مشتریان', v: faNum(customers.length), c: 'bg-blue-50 text-blue-700', icon: <IconUsers className="w-5 h-5" /> },
+          { l: 'درآمد کل', v: formatPrice(totalRevenue), c: 'bg-emerald-50 text-emerald-700', icon: <IconDollar className="w-5 h-5" /> },
+          { l: 'میانگین سفارش', v: formatPrice(avgOrderValue), c: 'bg-purple-50 text-purple-700', icon: <IconChart className="w-5 h-5" /> },
+          { l: 'مشتریان VIP', v: faNum(segments['VIP']), c: 'bg-amber-50 text-amber-700', icon: <IconStar className="w-5 h-5" /> },
+        ].map((k, i) => (
+          <div key={i} className={`rounded-xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-4`}>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[10px] text-cream-500">{k.l}</p>
+              <div className={k.c + ' p-1.5 rounded-lg'}>{k.icon}</div>
+            </div>
+            <p className={`text-lg font-extrabold tnum ${darkMode ? 'text-white' : 'text-brand-900'}`}>{k.v}</p>
+          </div>
+        ))}
       </div>
+
+      {/* Segment Distribution */}
+      <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
+        <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-3`}>توزیع مشتریان بر اساس دسته</h3>
+        <div className="grid grid-cols-4 gap-3">
+          {Object.entries(segments).map(([seg, count]) => (
+            <div key={seg} className="text-center">
+              <div className={`h-2 rounded-full mb-2 ${seg === 'VIP' ? 'bg-purple-500' : seg === 'وفادار' ? 'bg-emerald-500' : seg === 'جدید' ? 'bg-blue-500' : 'bg-brand-500'}`} style={{ width: `${customers.length ? (count / customers.length) * 100 : 0}%` }}></div>
+              <p className="text-[11px] font-bold text-brand-900">{seg === 'all' ? 'همه' : seg}</p>
+              <p className="text-[13px] font-extrabold tnum text-brand-700">{faNum(count)}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Filters and Actions */}
+      <div className="flex flex-wrap gap-2 items-center">
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="جستجو نام، موبایل، شهر..." className="flex-1 min-w-[200px] rounded-xl border border-cream-300 bg-white px-3 py-2 text-[12px] outline-none" />
+        <select value={segmentFilter} onChange={e => setSegmentFilter(e.target.value)} className="rounded-xl border border-cream-300 bg-white px-3 py-2 text-[12px] outline-none">
+          <option value="all">همه دسته‌ها</option>
+          <option value="VIP">VIP</option>
+          <option value="وفادار">وفادار</option>
+          <option value="جدید">جدید</option>
+        </select>
+        <button onClick={exportCustomers} className="flex items-center gap-1 px-3 py-2 rounded-xl border border-cream-300 text-[11px] font-bold">
+          <IconDownload className="w-4 h-4" /> خروجی اکسل
+        </button>
+      </div>
+
+      {/* Customers Table */}
+      <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} overflow-hidden`}>
+        <div className="overflow-x-auto">
+          <table className="w-full text-[12px]">
+            <thead>
+              <tr className={`border-y ${darkMode ? 'border-white/10 bg-white/5' : 'border-cream-300 bg-cream-100/70'}`}>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">نام</th>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">موبایل</th>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">شهر</th>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">سفارش‌ها</th>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">مجموع خرید</th>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">امتیاز</th>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">دسته</th>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">عملیات</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(c => (
+                <tr key={c.id} className={`border-b ${darkMode ? 'border-white/5 hover:bg-white/5' : 'border-cream-100 hover:bg-brand-50/40'} transition-colors`}>
+                  <td className="py-2.5 px-3 font-bold">{c.name}</td>
+                  <td className="py-2.5 px-3 tnum">{c.mobile}</td>
+                  <td className="py-2.5 px-3">{c.city}</td>
+                  <td className="py-2.5 px-3 tnum">{faNum(c.orders)}</td>
+                  <td className="py-2.5 px-3 tnum">{formatPrice(c.totalSpent)}</td>
+                  <td className="py-2.5 px-3 tnum">{faNum(c.loyalty)}</td>
+                  <td className="py-2.5 px-3">
+                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${c.segment === 'VIP' ? 'bg-purple-100 text-purple-700' : c.segment === 'وفادار' ? 'bg-emerald-100 text-emerald-700' : 'bg-cream-100 text-brand-700'}`}>
+                      {c.segment}
+                    </span>
+                  </td>
+                  <td className="py-2.5 px-3">
+                    <button onClick={() => setSelectedCustomer(c)} className="p-1.5 rounded-lg hover:bg-cream-100 text-brand-600">
+                      <IconEye className="w-4 h-4" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Customer Detail Drawer */}
+      {selectedCustomer && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-start justify-end" onClick={() => setSelectedCustomer(null)}>
+          <div className={`w-full max-w-md h-full overflow-y-auto ${darkMode ? 'bg-[#151b26]' : 'bg-white'} animate-drawer p-6`} onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-brand-900'}`}>پروفایل مشتری</h3>
+              <button onClick={() => setSelectedCustomer(null)}><IconX className="w-5 h-5" /></button>
+            </div>
+
+            {/* Customer Info */}
+            <div className={`rounded-xl border ${darkMode ? 'border-white/10 bg-[#1a212c]' : 'border-cream-200 bg-cream-50'} p-4 mb-4`}>
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-12 h-12 rounded-full bg-brand-100 flex items-center justify-center">
+                  <IconUser className="w-6 h-6 text-brand-700" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-brand-900">{selectedCustomer.name}</h4>
+                  <p className="text-[11px] text-cream-500">{selectedCustomer.mobile}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-[11px]">
+                <div><span className="text-cream-500">شهر: </span>{selectedCustomer.city}</div>
+                <div><span className="text-cream-500">تعداد سفارش: </span><span className="tnum font-bold">{faNum(selectedCustomer.orders)}</span></div>
+                <div><span className="text-cream-500">مجموع خرید: </span><span className="tnum font-bold">{formatPrice(selectedCustomer.totalSpent)}</span></div>
+                <div><span className="text-cream-500">امتیاز وفاداری: </span><span className="tnum font-bold">{faNum(selectedCustomer.loyalty)}</span></div>
+              </div>
+            </div>
+
+            {/* Order History */}
+            <div className="mb-4">
+              <h4 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-2`}>تاریخچه سفارش‌ها</h4>
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {customerOrders.map((o: any) => (
+                  <div key={o.id} className={`rounded-lg border ${darkMode ? 'border-white/10 bg-[#1a212c]' : 'border-cream-200 bg-white'} p-3`}>
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="text-[11px] font-bold">{o.code}</span>
+                      <span className="text-[10px] text-cream-500">{dayLabel(new Date(o.createdAt))}</span>
+                    </div>
+                    <div className="flex justify-between text-[11px]">
+                      <span className="tnum">{formatPrice(o.total)} تومان</span>
+                      <span className={`text-[10px] font-bold ${o.status === 'delivered' ? 'text-emerald-600' : o.status === 'cancelled' ? 'text-coral-600' : 'text-amber-600'}`}>
+                        {o.status === 'delivered' ? 'تحویل شده' : o.status === 'cancelled' ? 'لغو شده' : 'در حال پردازش'}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Notes */}
+            <div>
+              <h4 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-2`}>یادداشت‌ها</h4>
+              <div className="space-y-2 mb-3 max-h-40 overflow-y-auto">
+                {(notes[selectedCustomer.id] || []).map((note, i) => (
+                  <div key={i} className={`rounded-lg border ${darkMode ? 'border-white/10 bg-[#1a212c]' : 'border-cream-200 bg-cream-50'} p-2 text-[11px]`}>
+                    {note}
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <input value={newNote} onChange={e => setNewNote(e.target.value)} placeholder="یادداشت جدید..." className="flex-1 rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" />
+                <button onClick={() => addNote(selectedCustomer.id)} className="px-3 py-2 rounded-xl bg-brand-900 text-white text-[12px] font-bold">
+                  <IconPlus className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
