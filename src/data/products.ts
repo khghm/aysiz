@@ -15,7 +15,7 @@ export interface Category {
 export interface Review {
   id: string; productId: string; author: string; rating: number; text: string;
   pros: string[]; cons: string[]; status: 'pending' | 'approved' | 'rejected';
-  date: string;
+  date: string; reply?: string;
 }
 
 export interface Article {
