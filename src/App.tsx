@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { ShopProvider, useShop } from './context/ShopContext';
 import { AdminProvider, useAdmin } from './context/AdminContext';
 import { Product, Category, categories, brands } from './data/products';
-import { formatPrice, finalPrice, faNum, faDateFull, dayLabel, codeAmount, toCSV, downloadFile } from './utils/format';
+import { formatPrice, finalPrice, faNum, faDateFull, dayLabel, codeAmount, toCSV, toExcel, downloadFile } from './utils/format';
 import { summarize, growthRate, channelStats, funnelStages, bottleneck, aggregateCustomers, computePL, cashflowForecast } from './utils/analytics';
 import { IconHome, IconCart, IconSearch, IconUser, IconHeart, IconStar, IconFilter, IconTruck, IconLock, IconShield, IconClock, IconCheck, IconX, IconPlus, IconMinus, IconEdit, IconTrash, IconChevronDown, IconChevronLeft, IconChevronRight, IconMenu, IconGrid, IconList, IconSun, IconMoon, IconBell, IconSettings, IconChart, IconPackage, IconUsers, IconTag, IconDollar, IconReturn, IconTicket, IconRocket, IconEye, IconLogout, IconDownload, IconUpload, IconPrint, IconMail, IconPhone, IconMapPin, IconClipboard, IconLink, IconStore, IconBox, IconRefresh, IconCamera, IconCalendar, IconFlag, IconZap, IconGift, IconTrending, IconAlert, IconSend, IconCopy, IconBarcode } from './components/Icons';
 import { AreaChart, Area, PieChart, Pie, Cell, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ComposedChart } from 'recharts';
@@ -153,7 +153,7 @@ function Header() {
 
 /* ─────────── Home View ─────────── */
 function HomeView() {
-  const { products, setView, setSelectedProduct, articles, settings } = useShop();
+  const { products, setView, setSelectedProduct, setSelectedPost, articles, settings } = useShop();
   const active = products.filter(p => p.effective);
   const bestSellers = [...active].sort((a, b) => b.sales - a.sales).slice(0, 8);
   const newest = [...active].filter(p => p.isNew).slice(0, 8);
@@ -288,8 +288,12 @@ function HomeView() {
         <h2 className="font-display text-xl text-brand-900 mb-4">مجله تاسیز</h2>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {articles.slice(0, 3).map(a => (
-            <div key={a.id} className="rounded-2xl overflow-hidden border border-cream-200 hover:shadow-lg transition-all cursor-pointer" onClick={() => setView('blog')}>
-              <div className="h-32" style={{ background: `linear-gradient(135deg, ${a.colors[0]}, ${a.colors[1]})` }} />
+            <div key={a.id} className="rounded-2xl overflow-hidden border border-cream-200 hover:shadow-lg transition-all cursor-pointer" onClick={() => { setSelectedPost(a.id); setView('post'); }}>
+              {a.image ? (
+                <img src={a.image} alt={a.title} className="w-full h-32 object-cover" />
+              ) : (
+                <div className="h-32" style={{ background: `linear-gradient(135deg, ${a.colors[0]}, ${a.colors[1]})` }} />
+              )}
               <div className="p-4">
                 <span className="text-[10px] font-bold text-brand-600">{a.cat}</span>
                 <h3 className="text-[13px] font-bold text-brand-900 mt-1">{a.title}</h3>
@@ -735,14 +739,18 @@ function CartView() {
 
 /* ─────────── Blog View ─────────── */
 function BlogView() {
-  const { articles } = useShop();
+  const { articles, setView, setSelectedPost } = useShop();
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 animate-fade">
       <h1 className="font-display text-xl text-brand-900 mb-6">مجله تاسیز</h1>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {articles.map(a => (
-          <div key={a.id} className="rounded-2xl overflow-hidden border border-cream-200 hover:shadow-lg transition-all">
-            <div className="h-40" style={{ background: `linear-gradient(135deg, ${a.colors[0]}, ${a.colors[1]})` }} />
+          <div key={a.id} className="rounded-2xl overflow-hidden border border-cream-200 hover:shadow-lg transition-all cursor-pointer" onClick={() => { setSelectedPost(a.id); setView('post'); }}>
+            {a.image ? (
+              <img src={a.image} alt={a.title} className="w-full h-40 object-cover" />
+            ) : (
+              <div className="h-40" style={{ background: `linear-gradient(135deg, ${a.colors[0]}, ${a.colors[1]})` }} />
+            )}
             <div className="p-4">
               <div className="flex items-center gap-2 text-[10px] text-cream-500 mb-1"><span>{a.cat}</span><span>|</span><span>{a.readTime}</span><span>|</span><span>{faNum(a.views)} بازدید</span></div>
               <h3 className="text-[14px] font-bold text-brand-900">{a.title}</h3>
@@ -750,6 +758,57 @@ function BlogView() {
               <div className="flex flex-wrap gap-1 mt-2">{a.tags.map(t => <span key={t} className="text-[9px] bg-cream-100 text-brand-700 rounded-full px-2 py-0.5">{t}</span>)}</div>
             </div>
           </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BlogPostView() {
+  const { articles, selectedPost, setView } = useShop();
+  const article = articles.find(a => a.id === selectedPost);
+  
+  if (!article) return <div className="max-w-7xl mx-auto px-4 py-6 text-center">مقاله یافت نشد</div>;
+
+  const renderContent = (content: string) => {
+    return content.split('\n').map((line, i) => {
+      if (line.startsWith('## ')) {
+        return <h2 key={i} className="text-xl font-bold text-brand-900 mt-6 mb-3">{line.replace('## ', '')}</h2>;
+      } else if (line.startsWith('### ')) {
+        return <h3 key={i} className="text-lg font-bold text-brand-800 mt-4 mb-2">{line.replace('### ', '')}</h3>;
+      } else if (line.startsWith('- ')) {
+        return <li key={i} className="text-[14px] text-brand-700 mr-4 mb-1 list-disc">{line.replace('- ', '')}</li>;
+      } else if (line.trim()) {
+        return <p key={i} className="text-[14px] text-brand-700 leading-7 mb-3">{line}</p>;
+      }
+      return null;
+    });
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto px-4 py-6 animate-fade">
+      <button onClick={() => setView('blog')} className="flex items-center gap-2 text-brand-600 hover:text-brand-900 mb-4 text-[13px] font-bold">
+        <IconChevronRight className="w-4 h-4" /> بازگشت به مجله
+      </button>
+      {article.image && (
+        <img src={article.image} alt={article.title} className="w-full h-64 sm:h-80 object-cover rounded-2xl mb-6" />
+      )}
+      <div className="flex items-center gap-3 text-[11px] text-cream-500 mb-3">
+        <span className="bg-brand-100 text-brand-700 px-2 py-1 rounded-lg font-bold">{article.cat}</span>
+        <span>{article.date}</span>
+        <span>|</span>
+        <span>{article.readTime} مطالعه</span>
+        <span>|</span>
+        <span>{faNum(article.views)} بازدید</span>
+      </div>
+      <h1 className="text-2xl sm:text-3xl font-bold text-brand-900 mb-4">{article.title}</h1>
+      <p className="text-[15px] text-brand-600 leading-8 mb-6">{article.summary}</p>
+      <div className="prose max-w-none">
+        {renderContent(article.content)}
+      </div>
+      <div className="flex flex-wrap gap-2 mt-8 pt-6 border-t border-cream-200">
+        {article.tags.map(t => (
+          <span key={t} className="text-[11px] bg-cream-100 text-brand-700 rounded-full px-3 py-1 font-bold">{t}</span>
         ))}
       </div>
     </div>
@@ -1335,7 +1394,21 @@ function AdminFinance() {
   const [newExpense, setNewExpense] = useState({ title: '', category: 'سایر', amount: 0, note: '' });
   const cf = cashflowForecast(orders);
 
-  const exportPL = () => { downloadFile(toCSV([{ ...pl }]), 'profit-loss.csv'); };
+  const exportPL = () => { 
+    const data = [
+      { 'عنوان': 'فروش ناخالص', 'مبلغ (تومان)': pl.grossSales },
+      { 'عنوان': 'تخفیفات', 'مبلغ (تومان)': -pl.discounts },
+      { 'عنوان': 'درآمد خالص', 'مبلغ (تومان)': pl.netRevenue },
+      { 'عنوان': 'بهای تمام‌شده', 'مبلغ (تومان)': -pl.cogs },
+      { 'عنوان': 'سود ناخالص', 'مبلغ (تومان)': pl.grossProfit },
+      { 'عنوان': 'کارمزد درگاه', 'مبلغ (تومان)': -pl.gatewayFee },
+      { 'عنوان': 'هزینه ارسال', 'مبلغ (تومان)': -pl.shippingCost },
+      { 'عنوان': 'هزینه بسته‌بندی', 'مبلغ (تومان)': -pl.packagingCost },
+      { 'عنوان': 'هزینه‌های جاری', 'مبلغ (تومان)': -pl.operatingCosts },
+      { 'عنوان': 'سود خالص', 'مبلغ (تومان)': pl.netProfit },
+    ];
+    downloadFile(toExcel(data, 'صورت سود و زیان'), 'profit-loss.xls', 'application/vnd.ms-excel'); 
+  };
 
   return (
     <div className="space-y-4">
@@ -1624,7 +1697,7 @@ function AdminSystem() {
       )}
       {tab === 'audit' && (
         <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-4`}>
-          <div className="flex justify-between items-center mb-3"><h3 className="text-sm font-bold">لاگ رویدادها</h3><button onClick={() => downloadFile(JSON.stringify(audit, null, 2), 'audit-log.json', 'application/json')} className="flex items-center gap-1 px-2 py-1 rounded-lg border border-cream-300 text-[10px] font-bold"><IconDownload className="w-3 h-3" />JSON</button></div>
+          <div className="flex justify-between items-center mb-3"><h3 className="text-sm font-bold">لاگ رویدادها</h3><div className="flex gap-2"><button onClick={() => downloadFile(toExcel(audit.map((a: any) => ({ 'رویداد': a.action, 'کاربر': a.actor, 'نقش': a.role, 'هدف': a.target, 'شدت': a.severity, 'تاریخ': dayLabel(new Date(a.at)) })), 'لاگ رویدادها'), 'audit-log.xls', 'application/vnd.ms-excel')} className="flex items-center gap-1 px-2 py-1 rounded-lg border border-cream-300 text-[10px] font-bold"><IconDownload className="w-3 h-3" />اکسل</button><button onClick={() => downloadFile(JSON.stringify(audit, null, 2), 'audit-log.json', 'application/json')} className="flex items-center gap-1 px-2 py-1 rounded-lg border border-cream-300 text-[10px] font-bold"><IconDownload className="w-3 h-3" />JSON</button></div></div>
           <div className="space-y-1 max-h-64 overflow-y-auto">{audit.slice(0, 20).map((a: any) => (<div key={a.id} className="flex items-center justify-between text-[11px] py-1 border-b border-cream-100"><span>{a.action}</span><span className="text-cream-500">{dayLabel(new Date(a.at))}</span></div>))}</div>
         </div>
       )}
@@ -1876,10 +1949,30 @@ function AdminContentManager() {
 
 function AdminVendors() {
   const { vendors, setVendors, darkMode, log } = useAdmin();
+  
+  const exportVendors = () => {
+    const data = vendors.map((v: any) => ({
+      'نام فروشنده': v.name,
+      'نام حقوقی': v.legalName,
+      'شبا': v.iban,
+      'تلفن': v.phone,
+      'فروش کل (تومان)': v.totalSales,
+      'تعداد سفارش': v.totalOrders,
+      'تعداد قلم': v.totalItems,
+      'بدهی جاری (تومان)': v.balance,
+      'وضعیت': v.active ? 'فعال' : 'غیرفعال'
+    }));
+    downloadFile(toExcel(data, 'گزارش فروشندگان'), 'vendors.xls', 'application/vnd.ms-excel');
+    log('خروجی گزارش فروشندگان', 'vendors');
+  };
+
   return (
     <div className="space-y-4">
       <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
-        <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-3`}>فروشندگان</h3>
+        <div className="flex justify-between items-center mb-3">
+          <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'}`}>فروشندگان</h3>
+          <button onClick={exportVendors} className="flex items-center gap-1 px-3 py-1.5 rounded-xl border border-cream-300 text-[11px] font-bold"><IconDownload className="w-3.5 h-3.5" />خروجی اکسل</button>
+        </div>
         <table className="w-full text-[12px]"><thead><tr className={`border-y ${darkMode ? 'border-white/10 bg-white/5' : 'border-cream-300 bg-cream-100/70'}`}><th className="text-start py-2 px-2 font-bold text-cream-500">نام</th><th className="text-start py-2 px-2 font-bold text-cream-500">فروش کل</th><th className="text-start py-2 px-2 font-bold text-cream-500">بدهی</th><th className="text-start py-2 px-2 font-bold text-cream-500">وضعیت</th></tr></thead>
           <tbody>{vendors.map((v: any) => (<tr key={v.id} className={`border-b ${darkMode ? 'border-white/5' : 'border-cream-100'}`}><td className="py-2 px-2 font-bold">{v.name}</td><td className="py-2 px-2 tnum">{formatPrice(v.totalSales)}</td><td className="py-2 px-2 tnum">{formatPrice(v.balance)}</td><td className="py-2 px-2"><button onClick={() => { setVendors(vendors.map((x: any) => x.id === v.id ? { ...x, active: !x.active } : x)); }} className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${v.active ? 'bg-emerald-100 text-emerald-700' : 'bg-cream-100 text-cream-500'}`}>{v.active ? 'فعال' : 'غیرفعال'}</button></td></tr>))}</tbody>
         </table>
@@ -1964,7 +2057,7 @@ function AppContent() {
   const { view } = useShop();
   const { isAdmin } = useAdmin();
 
-  if (view === 'admin' || (isAdmin && view !== 'home' && view !== 'shop' && view !== 'product' && view !== 'cart' && view !== 'blog')) {
+  if (view === 'admin' || (isAdmin && view !== 'home' && view !== 'shop' && view !== 'product' && view !== 'cart' && view !== 'blog' && view !== 'post')) {
     return <AdminPanel />;
   }
 
@@ -1977,6 +2070,7 @@ function AppContent() {
         {view === 'product' && <ProductDetail />}
         {view === 'cart' && <CartView />}
         {view === 'blog' && <BlogView />}
+        {view === 'post' && <BlogPostView />}
       </main>
       <Footer />
       <Toasts />
