@@ -2270,17 +2270,16 @@ function AdminFinance() {
     downloadFile(toExcel(data, 'صورت سود و زیان'), 'profit-loss.xls', 'application/vnd.ms-excel'); 
   };
 
-  const tooltipStyle = { 
+  const tooltipStyle: any = { 
     background: '#1A2238',
     border: '2px solid #F5C518',
-    borderRadius: 12,
+    borderRadius: '12px',
     padding: '10px 14px',
-    color: '#ffffff',
-    fontSize: 12,
+    fontSize: '12px',
     fontWeight: '600',
     fontFamily: 'Vazirmatn',
     boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-    direction: 'rtl'
+    direction: 'rtl' as const
   };
 
   return (
@@ -2396,7 +2395,12 @@ function AdminFinance() {
                             <Cell key={`cell-${index}`} fill={entry.color} />
                           ))}
                         </Pie>
-                        <Tooltip contentStyle={tooltipStyle} formatter={(v: any) => formatPrice(v)} />
+                        <Tooltip 
+                          contentStyle={tooltipStyle}
+                          itemStyle={{ color: '#ffffff' }}
+                          labelStyle={{ color: '#F5C518', fontWeight: 'bold', marginBottom: '6px' }}
+                          formatter={(value: any) => [formatPrice(value) + ' تومان', '']}
+                        />
                         <text x="50%" y="50%" textAnchor="middle" dominantBaseline="middle" className="fill-brand-900 dark:fill-white" style={{ fontSize: '18px', fontWeight: 'bold' }}>
                           {faNum(netMargin.toFixed(0))}٪
                         </text>
@@ -2471,7 +2475,12 @@ function AdminFinance() {
                         <Cell key={`cell-${index}`} fill={['#1A2238', '#F5C518', '#E34A4A', '#10b981', '#8b5cf6', '#f59e0b'][index % 6]} />
                       ))}
                     </Pie>
-                    <Tooltip contentStyle={tooltipStyle} formatter={(v: any) => formatPrice(v)} />
+                    <Tooltip 
+                      contentStyle={tooltipStyle}
+                      itemStyle={{ color: '#ffffff' }}
+                      labelStyle={{ color: '#F5C518', fontWeight: 'bold', marginBottom: '6px' }}
+                      formatter={(value: any) => [formatPrice(value) + ' تومان', '']}
+                    />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
@@ -2649,7 +2658,12 @@ function AdminFinance() {
                   <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? '#242e3b' : '#E8E1CC'} />
                   <XAxis dataKey="date" tick={{ fontSize: 10, fontFamily: 'Vazirmatn' }} tickFormatter={(v) => v.slice(5)} stroke={darkMode ? '#8da5cc' : '#B8A97E'} />
                   <YAxis tick={{ fontSize: 10, fontFamily: 'Vazirmatn' }} tickFormatter={(v) => formatPrice(v / 1000000) + 'M'} stroke={darkMode ? '#8da5cc' : '#B8A97E'} />
-                  <Tooltip contentStyle={tooltipStyle} formatter={(v: any) => [formatPrice(v) + ' تومان', '']} />
+                  <Tooltip 
+                    contentStyle={tooltipStyle}
+                    itemStyle={{ color: '#ffffff' }}
+                    labelStyle={{ color: '#F5C518', fontWeight: 'bold', marginBottom: '6px' }}
+                    formatter={(value: any) => [formatPrice(value) + ' تومان', '']}
+                  />
                   <Bar dataKey="inflow" fill="url(#colorInflow)" name="ورودی" radius={[8, 8, 0, 0]} />
                   <Bar dataKey="outflow" fill="#E34A4A" name="خروجی" radius={[8, 8, 0, 0]} />
                   <Line type="monotone" dataKey="balance" stroke="#F5C518" strokeWidth={3} name="مانده" dot={{ fill: '#F5C518', r: 4 }} />
