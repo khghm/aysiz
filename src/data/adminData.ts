@@ -31,8 +31,8 @@ export const seedDiscountCodes = [
 ];
 
 export const seedSettings = {
-  storeName: 'تاسیز', phone: '۰۲۱-۸۸۷۷۶۶۵۵', email: 'info@tasis.ir',
-  address: 'تهران، خیابان ولیعصر، مجتمع تجاری تاسیز',
+  storeName: 'تای سیز', phone: '۰۲۱-۸۸۷۷۶۶۵۵', email: 'info@tasis.ir',
+  address: 'تهران، خیابان ولیعصر، مجتمع تجاری تای سیز',
   freeShippingThreshold: 1500000, shippingCost: 45000,
   vatRate: 9, levyRate: 0, gatewayFee: 1.5, packagingCost: 3000,
   showPricesWithTax: false, maintenance: false,
@@ -72,11 +72,11 @@ export const seedRMAs = [
 export const seedCarriers = [
   { id: 'cr1', name: 'پست پیشتاز', baseCost: 35000, deliveryDays: '۳-۵ روز', active: true },
   { id: 'cr2', name: 'تیپاکس', baseCost: 55000, deliveryDays: '۱-۲ روز', active: true },
-  { id: 'cr3', name: 'باربری تاسیز', baseCost: 25000, deliveryDays: '۲-۴ روز', active: false },
+  { id: 'cr3', name: 'باربری تای سیز', baseCost: 25000, deliveryDays: '۲-۴ روز', active: false },
 ];
 
 export const seedVendors = [
-  { id: 'v1', name: 'تولیدی تاسیز', legalName: 'شرکت تاسیز', iban: 'IR0123456789', phone: '02188776655', fee: 8, active: true, totalSales: 45000000, totalItems: 1200, totalOrders: 350, balance: 3500000 },
+  { id: 'v1', name: 'تولیدی تای سیز', legalName: 'شرکت تای سیز', iban: 'IR0123456789', phone: '02188776655', fee: 8, active: true, totalSales: 45000000, totalItems: 1200, totalOrders: 350, balance: 3500000 },
   { id: 'v2', name: 'پوشاک نیلی', legalName: 'پوشاک نیلی', iban: 'IR9876543210', phone: '02177665544', fee: 12, active: true, totalSales: 18000000, totalItems: 450, totalOrders: 120, balance: 1500000 },
 ];
 
@@ -132,9 +132,9 @@ export const seedSearchTerms = [
 ];
 
 export const seedPages = [
-  { id: 'pg1', slug: 'about', title: 'درباره تاسیز', content: '## فروشگاه تاسیز\n\nتاسیز با سالها تجربه در تولید و فروش پوشاک...', metaTitle: 'درباره ما - تاسیز', metaDesc: 'آشنایی با فروشگاه تاسیز', keywords: 'تاسیز, درباره ما', published: true },
-  { id: 'pg2', slug: 'contact', title: 'تماس با ما', content: '## اطلاعات تماس\n\n- تلفن: ۰۲۱-۸۸۷۷۶۶۵۵\n- ایمیل: info@tasis.ir\n- آدرس: تهران، خیابان ولیعصر', metaTitle: 'تماس با تاسیز', metaDesc: 'راه‌های ارتباطی با فروشگاه تاسیز', keywords: 'تماس, آدرس, تلفن', published: true },
-  { id: 'pg3', slug: 'terms', title: 'قوانین و مقررات', content: '## قوانین فروشگاه\n\n۱. تمامی محصولات دارای ضمانت اصالت هستند.\n۲. امکان بازگشت تا ۷ روز وجود دارد.', metaTitle: 'قوانین - تاسیز', metaDesc: 'قوانین و مقررات استفاده از فروشگاه تاسیز', keywords: 'قوانین, مقررات', published: true },
+  { id: 'pg1', slug: 'about', title: 'درباره تای سیز', content: '## فروشگاه تای سیز\\n\\nتای سیز با سالها تجربه در تولید و فروش پوشاک...', metaTitle: 'درباره ما - تای سیز', metaDesc: 'آشنایی با فروشگاه تای سیز', keywords: 'تای سیز, درباره ما', published: true },
+  { id: 'pg2', slug: 'contact', title: 'تماس با ما', content: '## اطلاعات تماس\\n\\n- تلفن: ۰۲۱-۸۸۷۷۶۶۵۵\\n- ایمیل: info@tasis.ir\\n- آدرس: تهران، خیابان ولیعصر', metaTitle: 'تماس با تای سیز', metaDesc: 'راه‌های ارتباطی با فروشگاه تای سیز', keywords: 'تماس, آدرس, تلفن', published: true },
+  { id: 'pg3', slug: 'terms', title: 'قوانین و مقررات', content: '## قوانین فروشگاه\\n\\n۱. تمامی محصولات دارای ضمانت اصالت هستند.\\n۲. امکان بازگشت تا ۷ روز وجود دارد.', metaTitle: 'قوانین - تای سیز', metaDesc: 'قوانین و مقررات استفاده از فروشگاه تای سیز', keywords: 'قوانین, مقررات', published: true },
 ];
 
 export const seedBanners = [
@@ -143,14 +143,14 @@ export const seedBanners = [
 ];
 
 export const seedPosts = [
-  { id: 'pst1', title: 'راهنمای انتخاب لباس زیر مناسب', category: 'راهنمای خرید', tags: ['لباس زیر', 'راهنما'], content: '## انتخاب صحیح\n\nانتخاب لباس زیر مناسب بسیار مهم است...', views: 450, date: daysAgo(5), color1: '#667eea', color2: '#764ba2', published: true, comments: 12 },
-  { id: 'pst2', title: 'ترندهای پوشاک ۱۴۰۴', category: 'مد و فشن', tags: ['ترند', 'مد'], content: '## ترندهای جدید\n\nامسال رنگ‌های...', views: 320, date: daysAgo(10), color1: '#f093fb', color2: '#f5576c', published: true, comments: 8 },
+  { id: 'pst1', title: 'راهنمای انتخاب لباس زیر مناسب', category: 'راهنمای خرید', tags: ['لباس زیر', 'راهنما'], content: '## انتخاب صحیح\\n\\nانتخاب لباس زیر مناسب بسیار مهم است...', views: 450, date: daysAgo(5), color1: '#667eea', color2: '#764ba2', published: true, comments: 12 },
+  { id: 'pst2', title: 'ترندهای پوشاک ۱۴۰۴', category: 'مد و فشن', tags: ['ترند', 'مد'], content: '## ترندهای جدید\\n\\nامسال رنگ‌های...', views: 320, date: daysAgo(10), color1: '#f093fb', color2: '#f5576c', published: true, comments: 8 },
 ];
 
 export const seedAutomations = [
-  { id: 'aut1', name: 'خوش‌آمدگویی مشتری جدید', event: 'register', channel: 'sms', template: 'سلام {name}! به تاسیز خوش آمدید.', active: true, sent: 234 },
+  { id: 'aut1', name: 'خوش‌آمدگویی مشتری جدید', event: 'register', channel: 'sms', template: 'سلام {name}! به تای سیز خوش آمدید.', active: true, sent: 234 },
   { id: 'aut2', name: 'یادآوری سبد رها شده', event: 'abandoned_cart', channel: 'sms', template: 'سبد خرید شما منتظر است! کد تخفیف: CART10', active: true, sent: 89 },
-  { id: 'aut3', name: 'تبریک تولد', event: 'birthday', channel: 'sms', template: 'تولدتان مبارک! هدیه ویژه تاسیز برای شما', active: false, sent: 45 },
+  { id: 'aut3', name: 'تبریک تولد', event: 'birthday', channel: 'sms', template: 'تولدتان مبارک! هدیه ویژه تای سیز برای شما', active: false, sent: 45 },
 ];
 
 export const seedLoyalty = {

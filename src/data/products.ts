@@ -5,7 +5,7 @@ export interface Product {
   sales: number; isNew: boolean; effective: boolean; description: string;
   features: string[]; specs: Record<string, string>; sku: string;
   commission: number; vendor: string; metaTitle?: string; metaDesc?: string; metaKeywords?: string;
-  reviews?: Review[];
+  reviews?: Review[]; lowStockThreshold?: number;
 }
 
 export interface Category {
@@ -52,7 +52,7 @@ export const categories: Category[] = [
 ];
 
 export const brands = [
-  'تاسیز', 'نایک', 'آدیداس', 'پوما', 'ریباک', 'آندرآرمور', 'کاترپیلار', 'نیوبالانس', 'اسکچرز', 'کروکس', 'ایزادی', 'هوپ'
+  'تای سیز', 'نایک', 'آدیداس', 'پوما', 'ریباک', 'آندرآرمور', 'کاترپیلار', 'نیوبالانس', 'اسکچرز', 'کروکس', 'ایزادی', 'هوپ'
 ];
 
 const productImages = [
@@ -87,34 +87,34 @@ const gradients = [
 
 export const seedProducts: Product[] = [
   {
-    id: 'p1', name: 'شورت مردانه نخی پریمیوم', category: 'underwear', subcategory: 'briefs', brand: 'تاسیز',
+    id: 'p1', name: 'شورت مردانه نخی پریمیوم', category: 'underwear', subcategory: 'briefs', brand: 'تای سیز',
     price: 285000, discount: 15, rating: 4.5, image: productImages[0], book: ['underwear', 'briefs'],
     colors: [{ name: 'مشکی', hex: '#1a1a1a' }, { name: 'سرمه‌ای', hex: '#1A2238' }, { name: 'خاکستری', hex: '#6b7280' }],
     sizes: ['S', 'M', 'L', 'XL', 'XXL'], stock: 45, sales: 230, isNew: true, effective: true,
     description: 'شورت مردانه از جنس نخ پنبه درجه یک با دوخت مقاوم و طراحی ارگونومیک. مناسب استفاده روزانه.',
     features: ['جنس نخ پنبه ۹۵٪', 'کش نرم و راحت', 'دوخت تقویت شده', 'قابل شستشو در ماشین'],
     specs: { 'جنس': 'نخ پنبه', 'نوع دوخت': 'ماشینی', 'کش': 'نرم سیلیکونی', 'ساخت': 'ایران' },
-    sku: 'TS-BR-001', commission: 8, vendor: 'تاسیز'
+    sku: 'TS-BR-001', commission: 8, vendor: 'تای سیز'
   },
   {
-    id: 'p2', name: 'سوتین زنانه اسپرت بدون فنر', category: 'underwear', subcategory: 'bra', brand: 'تاسیز',
+    id: 'p2', name: 'سوتین زنانه اسپرت بدون فنر', category: 'underwear', subcategory: 'bra', brand: 'تای سیز',
     price: 420000, discount: 20, rating: 4.7, image: productImages[1], book: ['underwear', 'bra'],
     colors: [{ name: 'مشکی', hex: '#1a1a1a' }, { name: 'سفید', hex: '#ffffff' }, { name: 'صورتی', hex: '#f9a8d4' }],
     sizes: ['A', 'B', 'C', 'D'], stock: 32, sales: 185, isNew: false, effective: true,
     description: 'سوتین اسپرت بدون فنر با پشتیبانی عالی، مناسب ورزش و استفاده روزانه.',
     features: ['بدون فنر', 'پارچه تنفس‌پذیر', 'بندهای قابل تنظیم', 'پشتیبانی متوسط'],
     specs: { 'جنس': 'پلی‌استر/اسپندکس', 'نوع': 'اسپرت بدون فنر', 'سایزبندی': 'A تا D', 'ساخت': 'ایران' },
-    sku: 'TS-BR-002', commission: 8, vendor: 'تاسیز'
+    sku: 'TS-BR-002', commission: 8, vendor: 'تای سیز'
   },
   {
-    id: 'p3', name: 'رکابی مردانه یقه گرد', category: 'underwear', subcategory: 'tank', brand: 'تاسیز',
+    id: 'p3', name: 'رکابی مردانه یقه گرد', category: 'underwear', subcategory: 'tank', brand: 'تای سیز',
     price: 195000, discount: 10, rating: 4.3, image: productImages[2], book: ['underwear', 'tank'],
     colors: [{ name: 'سفید', hex: '#ffffff' }, { name: 'مشکی', hex: '#1a1a1a' }, { name: 'طوسی', hex: '#9ca3af' }],
     sizes: ['M', 'L', 'XL', 'XXL'], stock: 60, sales: 310, isNew: false, effective: true,
     description: 'رکابی مردانه با یقه گرد و جنس نخ پنبه خنک، مناسب فصل گرما.',
     features: ['نخ پنبه ۱۰۰٪', 'یقه گرد کلاسیک', 'سبک و خنک', 'جذب عرق'],
     specs: { 'جنس': 'نخ پنبه', 'یقه': 'گرد', 'آستین': 'حلقه‌ای', 'ساخت': 'ایران' },
-    sku: 'TS-TK-001', commission: 8, vendor: 'تاسیز'
+    sku: 'TS-TK-001', commission: 8, vendor: 'تای سیز'
   },
   {
     id: 'p4', name: 'تی‌شرت مردانه طرح‌دار', category: 'tshirt', subcategory: 'tshirt-m', brand: 'نایک',
@@ -157,14 +157,14 @@ export const seedProducts: Product[] = [
     sku: 'SK-SD-001', commission: 10, vendor: ''
   },
   {
-    id: 'p8', name: 'جوراب مردانه ساق‌دار (۳ جفت)', category: 'socks', subcategory: 'socks-m', brand: 'تاسیز',
+    id: 'p8', name: 'جوراب مردانه ساق‌دار (۳ جفت)', category: 'socks', subcategory: 'socks-m', brand: 'تای سیز',
     price: 165000, discount: 10, rating: 4.2, image: productImages[7], book: ['socks', 'socks-m'],
     colors: [{ name: 'مشکی', hex: '#1a1a1a' }, { name: 'سرمه‌ای', hex: '#1e3a5f' }, { name: 'طوسی', hex: '#6b7280' }],
     sizes: ['39-42', '42-45'], stock: 80, sales: 520, isNew: false, effective: true,
     description: 'بسته ۳ جفتی جوراب مردانه ساق‌دار از جنس نخ بامبو با خاصیت ضد باکتری.',
     features: ['نخ بامبو', 'ضد باکتری', 'کش نرم', 'بسته ۳ جفتی'],
     specs: { 'جنس': 'بامبو/پنبه', 'ساق': 'متوسط', 'تعداد': '۳ جفت', 'ساخت': 'ایران' },
-    sku: 'TS-SK-001', commission: 8, vendor: 'تاسیز'
+    sku: 'TS-SK-001', commission: 8, vendor: 'تای سیز'
   },
   {
     id: 'p9', name: 'تی‌شرت زنانه یقه هفت', category: 'tshirt', subcategory: 'tshirt-w', brand: 'آدیداس',
@@ -177,14 +177,14 @@ export const seedProducts: Product[] = [
     sku: 'AD-TS-001', commission: 10, vendor: ''
   },
   {
-    id: 'p10', name: 'شورت زنانه بیکینی', category: 'underwear', subcategory: 'briefs', brand: 'تاسیز',
+    id: 'p10', name: 'شورت زنانه بیکینی', category: 'underwear', subcategory: 'briefs', brand: 'تای سیز',
     price: 195000, discount: 12, rating: 4.4, image: productImages[9], book: ['underwear', 'briefs'],
     colors: [{ name: 'مشکی', hex: '#1a1a1a' }, { name: 'سفید', hex: '#ffffff' }, { name: 'قرمز', hex: '#dc2626' }, { name: 'صورتی', hex: '#f9a8d4' }],
     sizes: ['S', 'M', 'L', 'XL'], stock: 55, sales: 440, isNew: false, effective: true,
     description: 'شورت زنانه مدل بیکینی با جنس میکروفایبر نرم و کشی راحت.',
     features: ['میکروفایبر', 'بدون درز', 'کش پهن', 'رنگ‌بندی متنوع'],
     specs: { 'جنس': 'میکروفایبر', 'مدل': 'بیکینی', 'درز': 'ندارد', 'ساخت': 'ایران' },
-    sku: 'TS-BR-003', commission: 8, vendor: 'تاسیز'
+    sku: 'TS-BR-003', commission: 8, vendor: 'تای سیز'
   },
   {
     id: 'p11', name: 'پیراهن زنانه گل‌دار', category: 'shirt', subcategory: 'shirt-w', brand: 'هوپ',
@@ -197,14 +197,14 @@ export const seedProducts: Product[] = [
     sku: 'HP-SH-001', commission: 12, vendor: ''
   },
   {
-    id: 'p12', name: 'جوراب زنانه ساق‌بلند (۲ جفت)', category: 'socks', subcategory: 'socks-w', brand: 'تاسیز',
+    id: 'p12', name: 'جوراب زنانه ساق‌بلند (۲ جفت)', category: 'socks', subcategory: 'socks-w', brand: 'تای سیز',
     price: 145000, discount: 5, rating: 4.1, image: productImages[11], book: ['socks', 'socks-w'],
     colors: [{ name: 'مشکی', hex: '#1a1a1a' }, { name: 'سفید', hex: '#ffffff' }, { name: 'طوسی', hex: '#9ca3af' }],
     sizes: ['36-39', '39-42'], stock: 70, sales: 350, isNew: false, effective: true,
     description: 'بسته ۲ جفتی جوراب زنانه ساق‌بلند با طرح ساده و جنس نخ پنبه.',
     features: ['نخ پنبه', 'ساق بلند', 'کش نرم', 'بسته ۲ جفتی'],
     specs: { 'جنس': 'نخ پنبه', 'ساق': 'بلند', 'تعداد': '۲ جفت', 'ساخت': 'ایران' },
-    sku: 'TS-SK-002', commission: 8, vendor: 'تاسیز'
+    sku: 'TS-SK-002', commission: 8, vendor: 'تای سیز'
   },
 ];
 

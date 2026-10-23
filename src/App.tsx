@@ -100,7 +100,7 @@ function Header() {
           <div className="w-10 h-10 rounded-xl bg-brand-900 flex items-center justify-center">
             <span className="text-white font-display text-lg">ت</span>
           </div>
-          <span className="font-display text-xl text-brand-900 hidden sm:block">{settings.storeName || 'تاسیز'}</span>
+          <span className="font-display text-xl text-brand-900 hidden sm:block">{settings.storeName || 'تای سیز'}</span>
         </div>
         <div className="flex-1 max-w-xl relative">
           <div className="relative">
@@ -169,7 +169,7 @@ function HomeView() {
           <div className="absolute bottom-10 left-10 w-48 h-48 rounded-full bg-coral-500 blur-3xl animate-floaty" style={{ animationDelay: '2s' }} />
         </div>
         <div className="max-w-7xl mx-auto relative z-10">
-          <h1 className="font-display text-3xl sm:text-5xl mb-4">فروشگاه آنلاین <span className="text-accent-500">تاسیز</span></h1>
+          <h1 className="font-display text-3xl sm:text-5xl mb-4">فروشگاه آنلاین <span className="text-accent-500">تای سیز</span></h1>
           <p className="text-brand-200 text-sm sm:text-base max-w-lg mb-6">بهترین پوشاک با کیفیت تولیدی و برندهای معتبر. لباس زیر، تی‌شرت، پیراهن، دمپایی، صندل و جوراب برای تمام سنین.</p>
           <button onClick={() => setView('shop')} className="bg-accent-500 text-brand-950 font-extrabold px-6 py-3 rounded-xl hover:bg-accent-400 transition-colors shadow-lg">مشاهده محصولات</button>
         </div>
@@ -255,7 +255,7 @@ function HomeView() {
       {/* BookShelf - Horizontal Scroll */}
       <section className="max-w-7xl mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-display text-xl text-brand-900">پیشنهاد ویژه تاسیز</h2>
+          <h2 className="font-display text-xl text-brand-900">پیشنهاد ویژه تای سیز</h2>
           <button onClick={() => setView('shop')} className="text-[12px] font-bold text-brand-600 hover:text-brand-900 flex items-center gap-1">مشاهده همه <IconChevronLeft className="w-4 h-4" /></button>
         </div>
         <div className="shelf flex gap-4 pb-4">
@@ -285,7 +285,7 @@ function HomeView() {
 
       {/* Magazine */}
       <section className="max-w-7xl mx-auto px-4 py-8">
-        <h2 className="font-display text-xl text-brand-900 mb-4">مجله تاسیز</h2>
+        <h2 className="font-display text-xl text-brand-900 mb-4">مجله تای سیز</h2>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {articles.slice(0, 3).map(a => (
             <div key={a.id} className="rounded-2xl overflow-hidden border border-cream-200 hover:shadow-lg transition-all cursor-pointer" onClick={() => { setSelectedPost(a.id); setView('post'); }}>
@@ -742,7 +742,7 @@ function BlogView() {
   const { articles, setView, setSelectedPost } = useShop();
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 animate-fade">
-      <h1 className="font-display text-xl text-brand-900 mb-6">مجله تاسیز</h1>
+      <h1 className="font-display text-xl text-brand-900 mb-6">مجله تای سیز</h1>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {articles.map(a => (
           <div key={a.id} className="rounded-2xl overflow-hidden border border-cream-200 hover:shadow-lg transition-all cursor-pointer" onClick={() => { setSelectedPost(a.id); setView('post'); }}>
@@ -822,8 +822,8 @@ function Footer() {
     <footer className="bg-brand-950 text-white mt-12">
       <div className="max-w-7xl mx-auto px-4 py-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
         <div>
-          <div className="flex items-center gap-2 mb-3"><div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center"><span className="font-display text-sm">ت</span></div><span className="font-display text-lg">{settings.storeName || 'تاسیز'}</span></div>
-          <p className="text-[12px] text-brand-300 leading-6">فروشگاه آنلاین پوشاک تاسیز با سال‌ها تجربه در تولید و فروش انواع پوشاک با کیفیت.</p>
+          <div className="flex items-center gap-2 mb-3"><div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center"><span className="font-display text-sm">ت</span></div><span className="font-display text-lg">{settings.storeName || 'تای سیز'}</span></div>
+          <p className="text-[12px] text-brand-300 leading-6">فروشگاه آنلاین پوشاک تای سیز با سال‌ها تجربه در تولید و فروش انواع پوشاک با کیفیت.</p>
         </div>
         <div>
           <h4 className="font-bold text-sm mb-3">دسترسی سریع</h4>
@@ -842,7 +842,7 @@ function Footer() {
           </div>
         </div>
       </div>
-      <div className="border-t border-white/10 py-4 text-center text-[11px] text-brand-400">تمامی حقوق محفوظ است | فروشگاه تاسیز {faNum(new Date().getFullYear())}</div>
+      <div className="border-t border-white/10 py-4 text-center text-[11px] text-brand-400">تمامی حقوق محفوظ است | فروشگاه تای سیز {faNum(new Date().getFullYear())}</div>
     </footer>
   );
 }
@@ -869,7 +869,7 @@ function AdminLogin() {
       <div className="relative bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm animate-rise">
         <div className="text-center mb-6">
           <div className="w-14 h-14 rounded-xl bg-brand-900 flex items-center justify-center mx-auto mb-3"><span className="text-white font-display text-xl">ت</span></div>
-          <h2 className="font-display text-xl text-brand-900">پنل مدیریت تاسیز</h2>
+          <h2 className="font-display text-xl text-brand-900">پنل مدیریت تای سیز</h2>
           <p className="text-[12px] text-cream-500 mt-1">برای ورود اطلاعات مدیر را وارد کنید</p>
         </div>
         <div className="space-y-3">
@@ -935,7 +935,7 @@ function AdminPanel() {
       {/* Sidebar */}
       <aside className={`fixed inset-y-0 start-0 z-40 w-64 bg-brand-950 border-e border-white/5 overflow-y-auto transition-transform lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full rtl:translate-x-full lg:rtl:translate-x-0'}`}>
         <div className="p-4 border-b border-white/5">
-          <div className="flex items-center gap-2"><div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center"><span className="text-white font-display text-sm">ت</span></div><span className="font-display text-white text-lg">پنل تاسیز</span></div>
+          <div className="flex items-center gap-2"><div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center"><span className="text-white font-display text-sm">ت</span></div><span className="font-display text-white text-lg">پنل تای سیز</span></div>
         </div>
         <nav className="p-3 space-y-1">
           {sections.map(s => (
@@ -1219,18 +1219,34 @@ function AdminProducts() {
   const { darkMode, log } = useAdmin();
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState('');
+  const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'out' | 'ok'>('all');
   const [editing, setEditing] = useState<any>(null);
   const [showForm, setShowForm] = useState(false);
+  const [showLowStockPanel, setShowLowStockPanel] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const getThreshold = (p: any) => p.lowStockThreshold || 5;
+  const getStockStatus = (p: any): 'out' | 'critical' | 'low' | 'ok' => {
+    const threshold = getThreshold(p);
+    if (p.stock === 0) return 'out';
+    if (p.stock <= threshold * 0.4) return 'critical';
+    if (p.stock <= threshold) return 'low';
+    return 'ok';
+  };
 
   const filtered = products.filter(p => {
     if (catFilter && p.category !== catFilter) return false;
     if (search && !p.name.includes(search) && !p.brand.includes(search)) return false;
+    if (stockFilter === 'low') { const s = getStockStatus(p); if (s !== 'low' && s !== 'critical') return false; }
+    if (stockFilter === 'out' && p.stock !== 0) return false;
+    if (stockFilter === 'ok' && getStockStatus(p) !== 'ok') return false;
     return true;
   });
   const active = products.filter(p => p.effective).length;
-  const lowStock = products.filter(p => p.stock <= 5).length;
+  const lowStockProducts = products.filter(p => { const s = getStockStatus(p); return s === 'low' || s === 'critical'; });
+  const lowStock = lowStockProducts.length;
   const outOfStock = products.filter(p => p.stock === 0).length;
+  const criticalStock = products.filter(p => getStockStatus(p) === 'critical').length;
 
   const saveProduct = () => {
     if (editing.id) {
@@ -1264,20 +1280,87 @@ function AdminProducts() {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {[{ l: 'کل کالاها', v: faNum(products.length), c: 'bg-blue-50 text-blue-700' }, { l: 'فعال', v: faNum(active), c: 'bg-emerald-50 text-emerald-700' }, { l: 'کم‌موجود', v: faNum(lowStock), c: 'bg-amber-50 text-amber-700' }, { l: 'ناموجود', v: faNum(outOfStock), c: 'bg-coral-50 text-coral-700' }].map((s, i) => (
-          <div key={i} className={`rounded-xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-3`}>
-            <p className="text-[10px] text-cream-500">{s.l}</p><p className={`text-lg font-extrabold tnum ${darkMode ? 'text-white' : 'text-brand-900'}`}>{s.v}</p>
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        {[
+          { l: 'کل کالاها', v: faNum(products.length), c: 'bg-blue-50 text-blue-700', icon: <IconPackage className="w-5 h-5" /> },
+          { l: 'فعال', v: faNum(active), c: 'bg-emerald-50 text-emerald-700', icon: <IconCheck className="w-5 h-5" /> },
+          { l: 'کم‌موجود', v: faNum(lowStock), c: 'bg-amber-50 text-amber-700', icon: <IconAlert className="w-5 h-5" /> },
+          { l: 'بحرانی', v: faNum(criticalStock), c: 'bg-coral-50 text-coral-700', icon: <IconAlert className="w-5 h-5" /> },
+          { l: 'ناموجود', v: faNum(outOfStock), c: 'bg-gray-100 text-gray-700', icon: <IconX className="w-5 h-5" /> },
+        ].map((s, i) => (
+          <div key={i} className={`rounded-xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-4`}>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[10px] text-cream-500">{s.l}</p>
+              <div className={`${s.c} p-1.5 rounded-lg`}>{s.icon}</div>
+            </div>
+            <p className={`text-lg font-extrabold tnum ${darkMode ? 'text-white' : 'text-brand-900'}`}>{s.v}</p>
           </div>
         ))}
       </div>
+
+      {/* Low Stock Alert Panel */}
+      {lowStock > 0 && (
+        <div className={`rounded-2xl border-2 ${lowStock > 5 ? 'border-coral-300 bg-coral-50' : 'border-amber-300 bg-amber-50'} p-4`}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className={`${lowStock > 5 ? 'bg-coral-500' : 'bg-amber-500'} p-2 rounded-lg`}>
+                <IconAlert className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h3 className={`text-[13px] font-bold ${lowStock > 5 ? 'text-coral-700' : 'text-amber-700'}`}>هشدار موجودی کم</h3>
+                <p className="text-[10px] text-cream-500">{faNum(lowStock)} محصول نیاز به شارژ مجدد دارند</p>
+              </div>
+            </div>
+            <button onClick={() => setShowLowStockPanel(!showLowStockPanel)} className={`px-3 py-1.5 rounded-xl text-[11px] font-bold ${lowStock > 5 ? 'bg-coral-500 text-white' : 'bg-amber-500 text-white'}`}>
+              {showLowStockPanel ? 'بستن' : 'مشاهده'}
+            </button>
+          </div>
+          {showLowStockPanel && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-3">
+              {lowStockProducts.slice(0, 9).map(p => {
+                const status = getStockStatus(p);
+                const threshold = getThreshold(p);
+                const percentage = Math.min(100, (p.stock / threshold) * 100);
+                return (
+                  <div key={p.id} className={`rounded-xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-200 bg-white'} p-3 flex items-center gap-3`}>
+                    <img src={p.image} className="w-10 h-10 rounded-lg object-cover" alt="" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[11px] font-bold truncate">{p.name}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <div className="flex-1 h-1.5 bg-cream-200 rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full ${status === 'critical' ? 'bg-coral-500' : 'bg-amber-500'}`} style={{ width: `${percentage}%` }}></div>
+                        </div>
+                        <span className={`tnum text-[10px] font-bold ${status === 'critical' ? 'text-coral-600' : 'text-amber-600'}`}>{faNum(p.stock)}/{faNum(threshold)}</span>
+                      </div>
+                    </div>
+                    <button onClick={() => { setEditing(p); setShowForm(true); }} className="p-1.5 rounded-lg hover:bg-cream-100 text-brand-600 flex-shrink-0">
+                      <IconEdit className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Filters */}
       <div className="flex flex-wrap gap-2">
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="جستجو محصول..." className="flex-1 min-w-[200px] rounded-xl border border-cream-300 bg-white px-3 py-2 text-[12px] outline-none" />
         <select value={catFilter} onChange={e => setCatFilter(e.target.value)} className="rounded-xl border border-cream-300 bg-white px-3 py-2 text-[12px] outline-none">
           <option value="">همه دسته‌ها</option>{categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
-        <button onClick={() => { setEditing({ name: '', category: 'underwear', subcategory: 'briefs', brand: 'تاسیز', price: 0, discount: 0, rating: 0, image: '', book: [], colors: [], sizes: [], stock: 0, sales: 0, isNew: true, effective: true, description: '', features: [], specs: {}, sku: '', commission: 8, vendor: '' }); setShowForm(true); }} className="bg-brand-900 text-white px-4 py-2 rounded-xl text-[12px] font-bold flex items-center gap-1"><IconPlus className="w-4 h-4" />افزودن محصول</button>
+        <select value={stockFilter} onChange={e => setStockFilter(e.target.value as any)} className="rounded-xl border border-cream-300 bg-white px-3 py-2 text-[12px] outline-none">
+          <option value="all">همه وضعیت‌ها</option>
+          <option value="low">کم‌موجود</option>
+          <option value="out">ناموجود</option>
+          <option value="ok">موجودی کافی</option>
+        </select>
+        <button onClick={() => { setEditing({ name: '', category: 'underwear', subcategory: 'briefs', brand: 'تای سیز', price: 0, discount: 0, rating: 0, image: '', book: [], colors: [], sizes: [], stock: 0, sales: 0, isNew: true, effective: true, description: '', features: [], specs: {}, sku: '', commission: 8, vendor: '', lowStockThreshold: 5 }); setShowForm(true); }} className="bg-brand-900 text-white px-4 py-2 rounded-xl text-[12px] font-bold flex items-center gap-1"><IconPlus className="w-4 h-4" />افزودن محصول</button>
       </div>
+
+      {/* Products Table */}
       <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} overflow-hidden`}>
         <div className="overflow-x-auto">
           <table className="w-full text-[12px]">
@@ -1287,23 +1370,48 @@ function AdminProducts() {
               <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">برند</th>
               <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">قیمت</th>
               <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">موجودی</th>
-              <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">وضعیت</th>
+              <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">وضعیت موجودی</th>
+              <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">نمایش</th>
               <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">عملیات</th>
             </tr></thead>
-            <tbody>{filtered.map(p => (
-              <tr key={p.id} className={`border-b ${darkMode ? 'border-white/5 hover:bg-white/5' : 'border-cream-100 hover:bg-brand-50/40'}`}>
+            <tbody>{filtered.map(p => {
+              const status = getStockStatus(p);
+              const threshold = getThreshold(p);
+              const percentage = Math.min(100, (p.stock / threshold) * 100);
+              const statusConfig = {
+                out: { label: 'ناموجود', color: 'bg-gray-100 text-gray-700', dot: 'bg-gray-500' },
+                critical: { label: 'بحرانی', color: 'bg-coral-100 text-coral-700', dot: 'bg-coral-500' },
+                low: { label: 'کم‌موجود', color: 'bg-amber-100 text-amber-700', dot: 'bg-amber-500' },
+                ok: { label: 'موجود', color: 'bg-emerald-100 text-emerald-700', dot: 'bg-emerald-500' },
+              }[status];
+              return (
+              <tr key={p.id} className={`border-b ${darkMode ? 'border-white/5 hover:bg-white/5' : 'border-cream-100 hover:bg-brand-50/40'} ${status === 'critical' ? (darkMode ? 'bg-coral-950/20' : 'bg-coral-50/50') : status === 'low' ? (darkMode ? 'bg-amber-950/20' : 'bg-amber-50/30') : ''}`}>
                 <td className="py-2 px-3"><img src={p.image} className="w-9 h-9 rounded-lg object-cover" alt="" /></td>
                 <td className="py-2 px-3 font-bold">{p.name}</td>
                 <td className="py-2 px-3">{p.brand}</td>
                 <td className="py-2 px-3 tnum">{formatPrice(finalPrice(p.price, p.discount))}</td>
-                <td className="py-2 px-3 tnum">{p.stock <= 5 ? <span className="text-coral-600 font-bold">{faNum(p.stock)}</span> : faNum(p.stock)}</td>
+                <td className="py-2 px-3">
+                  <div className="flex items-center gap-2">
+                    <span className={`tnum font-bold ${status === 'critical' ? 'text-coral-600' : status === 'low' ? 'text-amber-600' : status === 'out' ? 'text-gray-500' : ''}`}>{faNum(p.stock)}</span>
+                    <div className="w-16 h-1.5 bg-cream-200 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full transition-all ${status === 'critical' ? 'bg-coral-500' : status === 'low' ? 'bg-amber-500' : status === 'out' ? 'bg-gray-400' : 'bg-emerald-500'}`} style={{ width: `${percentage}%` }}></div>
+                    </div>
+                  </div>
+                </td>
+                <td className="py-2 px-3">
+                  <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold ${statusConfig.color}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${statusConfig.dot}`}></span>
+                    {statusConfig.label}
+                  </span>
+                </td>
                 <td className="py-2 px-3"><button onClick={() => { setProducts(products.map(x => x.id === p.id ? { ...x, effective: !x.effective } : x)); }} className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${p.effective ? 'bg-emerald-100 text-emerald-700' : 'bg-cream-100 text-cream-500'}`}>{p.effective ? 'فعال' : 'غیرفعال'}</button></td>
                 <td className="py-2 px-3 flex gap-1">
                   <button onClick={() => { setEditing(p); setShowForm(true); }} className="p-1.5 rounded-lg hover:bg-cream-100 text-brand-600"><IconEdit className="w-3.5 h-3.5" /></button>
                   <button onClick={() => deleteProduct(p.id)} className="p-1.5 rounded-lg hover:bg-coral-50 text-coral-500"><IconTrash className="w-3.5 h-3.5" /></button>
                 </td>
               </tr>
-            ))}</tbody>
+              );
+            })}</tbody>
           </table>
         </div>
       </div>
@@ -1321,6 +1429,14 @@ function AdminProducts() {
                 <div><label className="text-[11px] font-bold text-cream-500 mb-1 block">قیمت (تومان)</label><input type="number" value={editing.price} onChange={e => setEditing({ ...editing, price: +e.target.value })} className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" /></div>
                 <div><label className="text-[11px] font-bold text-cream-500 mb-1 block">تخفیف (٪)</label><input type="number" value={editing.discount} onChange={e => setEditing({ ...editing, discount: +e.target.value })} className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" /></div>
                 <div><label className="text-[11px] font-bold text-cream-500 mb-1 block">موجودی</label><input type="number" value={editing.stock} onChange={e => setEditing({ ...editing, stock: +e.target.value })} className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" /></div>
+              </div>
+              <div className={`rounded-xl border ${darkMode ? 'border-white/10 bg-[#1a212c]' : 'border-amber-200 bg-amber-50'} p-3`}>
+                <label className="text-[11px] font-bold text-amber-700 mb-1 flex items-center gap-1"><IconAlert className="w-3.5 h-3.5" /> حد هشدار موجودی</label>
+                <div className="flex items-center gap-2">
+                  <input type="number" value={editing.lowStockThreshold || 5} onChange={e => setEditing({ ...editing, lowStockThreshold: +e.target.value })} className="flex-1 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-[12px] outline-none" min="1" />
+                  <span className="text-[10px] text-amber-600">عدد</span>
+                </div>
+                <p className="text-[10px] text-cream-500 mt-1">وقتی موجودی به این عدد برسد، هشدار نمایش داده می‌شود</p>
               </div>
               <div><label className="text-[11px] font-bold text-cream-500 mb-1 block">توضیحات</label><textarea value={editing.description} onChange={e => setEditing({ ...editing, description: e.target.value })} className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none h-20 resize-none" /></div>
               <div>
@@ -1444,7 +1560,7 @@ function AdminInvoices() {
 <body>
   <div class="header">
     <div class="logo-section">
-      <div class="logo">فروشگاه اینترنتی پوشاک تاسیز</div>
+      <div class="logo">فروشگاه اینترنتی پوشاک تای سیز</div>
       <div class="store-info">
         <div>تلفن: ${settings.phone}</div>
         <div>ایمیل: ${settings.email}</div>
@@ -1522,7 +1638,7 @@ function AdminInvoices() {
   </div>
 
   <div class="footer">
-    <div>از خرید شما متشکریم | فروشگاه اینترنتی پوشاک تاسیز</div>
+    <div>از خرید شما متشکریم | فروشگاه اینترنتی پوشاک تای سیز</div>
     <div>این فاکتور معتبر و مورد تأیید می‌باشد</div>
   </div>
 
@@ -1632,7 +1748,7 @@ function InvoicePreview({ invoice }: { invoice: any }) {
     <div className="border border-cream-300 rounded-xl p-6 bg-white">
       <div className="flex justify-between items-start border-b-2 border-brand-900 pb-4 mb-6">
         <div>
-          <h2 className="text-xl font-bold text-brand-900 mb-2">فروشگاه اینترنتی پوشاک تاسیز</h2>
+          <h2 className="text-xl font-bold text-brand-900 mb-2">فروشگاه اینترنتی پوشاک تای سیز</h2>
           <div className="text-[11px] text-cream-500 space-y-1">
             <p>تلفن: {settings.phone}</p>
             <p>ایمیل: {settings.email}</p>
@@ -1712,7 +1828,7 @@ function InvoicePreview({ invoice }: { invoice: any }) {
       </div>
 
       <div className="mt-6 pt-4 border-t-2 border-brand-900 text-center text-[11px] text-cream-500">
-        <p>از خرید شما متشکریم | فروشگاه اینترنتی پوشاک تاسیز</p>
+        <p>از خرید شما متشکریم | فروشگاه اینترنتی پوشاک تای سیز</p>
       </div>
     </div>
   );
