@@ -124,6 +124,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
     let active = true;
     api.catalog.products().then((result) => {
       if (!active) return;
+      if (!Array.isArray(result?.items)) throw new Error('پاسخ فهرست محصولات معتبر نیست');
       setProductsState(result.items);
       save('tasis-products', result.items);
     }).catch((error) => addToast('danger', `بارگذاری محصولات ناموفق بود: ${error.message}`));
@@ -134,11 +135,13 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
     }).catch((error) => addToast('danger', `بارگذاری تنظیمات فروشگاه ناموفق بود: ${error.message}`));
     api.catalog.articles().then((result) => {
       if (!active) return;
+      if (!Array.isArray(result?.items)) throw new Error('پاسخ فهرست مقاله‌ها معتبر نیست');
       setArticlesState(result.items);
       save('tasis-articles', result.items);
     }).catch((error) => addToast('danger', `بارگذاری وبلاگ ناموفق بود: ${error.message}`));
     api.catalog.reviews('', 'approved').then((result) => {
       if (!active) return;
+      if (!Array.isArray(result?.items)) throw new Error('پاسخ فهرست دیدگاه‌ها معتبر نیست');
       setReviewsState(result.items);
       save('tasis-reviews', result.items);
     }).catch((error) => addToast('danger', `بارگذاری دیدگاه‌ها ناموفق بود: ${error.message}`));

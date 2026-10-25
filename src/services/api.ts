@@ -4,6 +4,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 const TOKEN_KEY = 'tasis-token';
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '');
 
 export const getToken = () => localStorage.getItem(TOKEN_KEY);
 export const setToken = (t: string | null) =>
@@ -26,18 +27,42 @@ async function request<T = any>(path: string, options: RequestInit = {}): Promis
 
   let res: Response;
   try {
-    res = await fetch(`/api${path}`, { ...options, headers });
+    res = await fetch(`${API_BASE_URL}/api${path}`, { ...options, headers });
   } catch {
     throw new ApiError(0, 'سرور در دسترس نیست');
   }
 
-  const data = await res.json().catch(() => ({}));
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.toLowerCase().includes('application/json')) {
+    if (!res.ok) throw new ApiError(res.status, 'پاسخ معتبر از سرور دریافت نشد');
+    throw new ApiError(502, 'سرویس API متصل نیست یا پاسخ JSON نمی‌دهد');
+  }
+
+  let data: unknown;
+  try {
+    data = await res.json();
+  } catch {
+    throw new ApiError(502, 'پاسخ سرویس API معتبر نیست');
+  }
   if (!res.ok) {
     if (res.status === 401) {
       setToken(null);
       if (typeof window !== 'undefined') window.dispatchEvent(new Event('auth-expired'));
     }
-    throw new ApiError(res.status, data.message || data.error || 'خطای نامشخص', data.fields);
+    const payload = data && typeof data === 'object' && !Array.isArray(data)
+      ? data as Record<string, unknown>
+      : {};
+    const fields = payload.fields && typeof payload.fields === 'object' && !Array.isArray(payload.fields)
+      && Object.values(payload.fields).every((field) => typeof field === 'string')
+      ? payload.fields as Record<string, string>
+      : undefined;
+    const message = typeof payload.message === 'string'
+      ? payload.message
+      : typeof payload.error === 'string' ? payload.error : 'خطای نامشخص';
+    throw new ApiError(res.status, message, fields);
+  }
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new ApiError(502, 'ساختار پاسخ سرویس API معتبر نیست');
   }
   return data as T;
 }
