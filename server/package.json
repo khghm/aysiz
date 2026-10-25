@@ -1,0 +1,22 @@
+{
+  "name": "tasis-backend",
+  "version": "1.0.0",
+  "description": "بک‌اند فروشگاه پوشاک تای سیز (Express + PostgreSQL)",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "migrate:sqlite": "node src/migrate-sqlite.js",
+    "seed": "node src/seed.js --force"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "express-async-errors": "^3.1.1",
+    "helmet": "^8.3.0",
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.13.1"
+  }
+}

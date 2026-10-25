@@ -2,8 +2,9 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { Product, Review, seedProducts, seedReviews, categories, brands, seedArticles, Article, Category } from '../data/products';
 import { seedSettings, seedDiscountCodes } from '../data/adminData';
 import { formatPrice, finalPrice, codeAmount } from '../utils/format';
+import * as api from '../services/api';
 
-type View = 'home' | 'shop' | 'product' | 'cart' | 'page' | 'blog' | 'post' | 'admin' | 'login';
+type View = 'home' | 'shop' | 'product' | 'cart' | 'page' | 'blog' | 'post' | 'admin' | 'login' | 'account' | 'payment-result';
 
 interface CartItem { product: Product; qty: number; size: string; color: string; }
 interface Toast { id: string; type: 'success' | 'info' | 'danger'; message: string; }
@@ -24,11 +25,13 @@ interface ShopContextType {
   settings: Settings; setSettings: (s: Settings) => void;
   discountCodes: any[]; setDiscountCodes: (c: any[]) => void;
   appliedCode: any; setAppliedCode: (c: any) => void;
-  validateCode: (code: string) => any;
-  placeOrder: (info: any) => string;
+  validateCode: (code: string, subtotal: number) => Promise<any>;
+  placeOrder: (info: any) => Promise<string>;
   orders: any[]; setOrders: (o: any[]) => void;
   money: (n: number) => string;
   refCode: string; setRefCode: (c: string) => void;
+  customer: api.Customer | null; setCustomer: (c: api.Customer | null) => void;
+  logoutCustomer: () => void;
 }
 
 const ShopContext = createContext<ShopContextType>({} as ShopContextType);
@@ -55,23 +58,92 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
   const [discountCodes, setDiscountCodesState] = useState(() => load('tasis-codes', seedDiscountCodes));
   const [appliedCode, setAppliedCode] = useState<any>(null);
   const [orders, setOrdersState] = useState<any[]>(() => load('tasis-orders', []));
-  const [refCode, setRefCode] = useState('');
+  const [refCode, setRefCode] = useState(() => load('tasis-affiliate-ref', ''));
+  const [affiliateVisitorId, setAffiliateVisitorId] = useState(() => load('tasis-affiliate-visitor', ''));
+  const [customer, setCustomerState] = useState<api.Customer | null>(() => load('tasis-customer', null));
 
-  const setProducts = (p: Product[]) => { setProductsState(p); save('tasis-products', p); };
-  const setReviews = (r: Review[]) => { setReviewsState(r); save('tasis-reviews', r); };
-  const setArticles = (a: Article[]) => { setArticlesState(a); save('tasis-articles', a); };
-  const setSettings = (s: Settings) => { setSettingsState(s); save('tasis-settings', s); };
-  const setDiscountCodes = (c: any[]) => { setDiscountCodesState(c); save('tasis-codes', c); };
-  const setOrders = (o: any[]) => { setOrdersState(o); save('tasis-orders', o); };
+  const setCustomer = useCallback((c: api.Customer | null) => {
+    setCustomerState(c);
+    if (c) save('tasis-customer', c); else localStorage.removeItem('tasis-customer');
+  }, []);
+  const logoutCustomer = useCallback(() => {
+    api.setToken(null);
+    setCustomer(null);
+  }, [setCustomer]);
+  const setProducts = useCallback((p: Product[]) => { setProductsState(p); save('tasis-products', p); }, []);
+  const setReviews = useCallback((r: Review[]) => { setReviewsState(r); save('tasis-reviews', r); }, []);
+  const setArticles = useCallback((a: Article[]) => { setArticlesState(a); save('tasis-articles', a); }, []);
+  const setSettings = useCallback((s: Settings) => { setSettingsState(s); save('tasis-settings', s); }, []);
+  const setDiscountCodes = useCallback((c: any[]) => { setDiscountCodesState(c); save('tasis-codes', c); }, []);
+  const setOrders = useCallback((o: any[]) => { setOrdersState(o); save('tasis-orders', o); }, []);
 
   useEffect(() => { save('tasis-cart', cart); }, [cart]);
   useEffect(() => { save('tasis-wishlist', wishlist); }, [wishlist]);
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const incomingRef = url.searchParams.get('ref');
+    if (!incomingRef) return;
+    const removeReferralFromUrl = () => {
+      url.searchParams.delete('ref');
+      window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+    };
+    const visitorId = affiliateVisitorId || crypto.randomUUID();
+    if (!affiliateVisitorId) {
+      setAffiliateVisitorId(visitorId);
+      save('tasis-affiliate-visitor', visitorId);
+    }
+    api.affiliate.track(incomingRef, visitorId).then((result) => {
+      setRefCode(result.refCode);
+      save('tasis-affiliate-ref', result.refCode);
+      removeReferralFromUrl();
+    }).catch((error) => addToast('danger', `ثبت لینک معرف ناموفق بود: ${error.message}`));
+  }, []);
 
   const addToast = useCallback((type: Toast['type'], message: string) => {
     const id = Date.now().toString();
     setToasts(t => [...t, { id, type, message }]);
     setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 3200);
   }, []);
+
+  useEffect(() => {
+    const handleAdminError = (event: Event) => {
+      const message = (event as CustomEvent<string>).detail;
+      addToast('danger', message || 'عملیات پنل ناموفق بود');
+    };
+    const handleExpiredSession = () => setCustomer(null);
+    window.addEventListener('admin-api-error', handleAdminError);
+    window.addEventListener('auth-expired', handleExpiredSession);
+    return () => {
+      window.removeEventListener('admin-api-error', handleAdminError);
+      window.removeEventListener('auth-expired', handleExpiredSession);
+    };
+  }, [addToast, setCustomer]);
+
+  useEffect(() => {
+    let active = true;
+    api.catalog.products().then((result) => {
+      if (!active) return;
+      setProductsState(result.items);
+      save('tasis-products', result.items);
+    }).catch((error) => addToast('danger', `بارگذاری محصولات ناموفق بود: ${error.message}`));
+    api.catalog.settings().then((result) => {
+      if (!active) return;
+      setSettingsState((current) => ({ ...current, ...result }));
+      save('tasis-settings', { ...settings, ...result });
+    }).catch((error) => addToast('danger', `بارگذاری تنظیمات فروشگاه ناموفق بود: ${error.message}`));
+    api.catalog.articles().then((result) => {
+      if (!active) return;
+      setArticlesState(result.items);
+      save('tasis-articles', result.items);
+    }).catch((error) => addToast('danger', `بارگذاری وبلاگ ناموفق بود: ${error.message}`));
+    api.catalog.reviews('', 'approved').then((result) => {
+      if (!active) return;
+      setReviewsState(result.items);
+      save('tasis-reviews', result.items);
+    }).catch((error) => addToast('danger', `بارگذاری دیدگاه‌ها ناموفق بود: ${error.message}`));
+    return () => { active = false; };
+  }, [addToast]);
 
   const addToCart = (item: CartItem) => {
     setCart(c => {
@@ -92,41 +164,32 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
     setWishlist(w => w.includes(id) ? w.filter(x => x !== id) : [...w, id]);
   };
 
-  const validateCode = (code: string) => {
-    const c = discountCodes.find((x: any) => x.code === code.toUpperCase());
-    if (!c) return { error: 'کد تخفیف نامعتبر است' };
-    if (!c.active) return { error: 'کد تخفیف غیرفعال است' };
-    if (new Date(c.expiresAt) < new Date()) return { error: 'کد تخفیف منقضی شده است' };
-    if (c.usedCount >= c.maxUses) return { error: 'ظرفیت کد تخفیف تکمیل شده' };
-    return { code: c };
+  const validateCode = async (code: string, subtotal: number) => {
+    try {
+      const result = await api.catalog.validateDiscount(code, subtotal);
+      return { code: result.code };
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : 'اعتبارسنجی کد تخفیف ناموفق بود' };
+    }
   };
 
   const money = (n: number) => formatPrice(n) + ' تومان';
 
-  const placeOrder = (info: any) => {
-    const subtotal = cart.reduce((s, i) => s + finalPrice(i.product.price, i.product.discount) * i.qty, 0);
-    const discountAmt = appliedCode ? codeAmount(appliedCode, subtotal) : 0;
-    const shipping = subtotal >= settings.freeShippingThreshold ? 0 : settings.shippingCost;
-    const taxRate = settings.showPricesWithTax ? (settings.vatRate + settings.levyRate) / 100 : 0;
-    const tax = Math.round((subtotal - discountAmt) * taxRate);
-    const total = subtotal - discountAmt + shipping + tax;
-    const code = `SQ-${String(Date.now()).slice(-6)}`;
-    const order = {
-      id: `ord-${Date.now()}`, code, customer: info.name, mobile: info.mobile, city: info.city,
-      items: cart.map(i => ({ productId: i.product.id, name: i.product.name, qty: i.qty, price: i.product.price, discount: i.product.discount })),
-      subtotal, discountAmount: discountAmt, shipping, tax, total,
-      status: 'pending', payment: 'online', channel: 'website',
-      createdAt: new Date().toISOString(), address: info.address, couponCode: appliedCode?.code
+  // ثبت سفارش روی بک‌اند و هدایت به درگاه پرداخت (زرین‌پال)
+  const placeOrder = async (info: any) => {
+    const payload: api.CreateOrderPayload = {
+      name: info.name, mobile: info.mobile, city: info.city, address: info.address, postalCode: info.postalCode,
+      items: cart.map(i => ({ productId: i.product.id, qty: i.qty, size: i.size, color: i.color })),
+      couponCode: appliedCode?.code || undefined,
+      redeemPoints: info.redeemPoints || 0,
+      affiliateVisitorId: affiliateVisitorId || undefined,
     };
-    const newOrders = [...orders, order];
-    setOrders(newOrders);
-    if (appliedCode) {
-      const codes = discountCodes.map((c: any) => c.code === appliedCode.code ? { ...c, usedCount: c.usedCount + 1 } : c);
-      setDiscountCodes(codes);
-    }
+    const { order } = await api.orders.create(payload);
+    const pay = await api.orders.paymentStart(order.id);
     clearCart();
     setAppliedCode(null);
-    return code;
+    window.location.href = pay.redirectUrl; // درگاه واقعی یا شبیه‌ساز تستی زرین‌پال
+    return order.code;
   };
 
   return (
@@ -136,7 +199,8 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       cart, addToCart, removeFromCart, updateCartQty, clearCart,
       wishlist, toggleWishlist, toasts, addToast,
       settings, setSettings, discountCodes, setDiscountCodes, appliedCode, setAppliedCode,
-      validateCode, placeOrder, orders, setOrders, money, refCode, setRefCode
+      validateCode, placeOrder, orders, setOrders, money, refCode, setRefCode,
+      customer, setCustomer, logoutCustomer
     }}>
       {children}
     </ShopContext.Provider>

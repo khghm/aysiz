@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { ShopProvider, useShop } from './context/ShopContext';
 import { AdminProvider, useAdmin } from './context/AdminContext';
 import { Product, Category, categories, brands } from './data/products';
 import { formatPrice, finalPrice, faNum, faDateFull, dayLabel, codeAmount, toCSV, toExcel, downloadFile } from './utils/format';
-import { summarize, growthRate, channelStats, funnelStages, bottleneck, aggregateCustomers, computePL, cashflowForecast } from './utils/analytics';
+import { summarize, growthRate, channelStats, funnelStages, bottleneck, aggregateCustomers, computePL, cashflowForecast, isPaidOrder, collectedAmount } from './utils/analytics';
+import * as api from './services/api';
 import { IconHome, IconCart, IconSearch, IconUser, IconHeart, IconStar, IconFilter, IconTruck, IconLock, IconShield, IconClock, IconCheck, IconX, IconPlus, IconMinus, IconEdit, IconTrash, IconChevronDown, IconChevronLeft, IconChevronRight, IconMenu, IconGrid, IconList, IconSun, IconMoon, IconBell, IconSettings, IconChart, IconPackage, IconUsers, IconTag, IconDollar, IconReturn, IconTicket, IconRocket, IconEye, IconLogout, IconDownload, IconUpload, IconPrint, IconMail, IconPhone, IconMapPin, IconClipboard, IconLink, IconStore, IconBox, IconRefresh, IconCamera, IconCalendar, IconFlag, IconZap, IconGift, IconTrending, IconAlert, IconSend, IconCopy, IconBarcode } from './components/Icons';
 import { AreaChart, Area, PieChart, Pie, Cell, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ComposedChart } from 'recharts';
 
@@ -72,7 +73,7 @@ function ProductCard({ product }: { product: Product }) {
 
 /* ─────────── Header ─────────── */
 function Header() {
-  const { setView, view, cart, wishlist, products, setSelectedProduct, setSelectedPage, settings } = useShop();
+  const { setView, view, cart, wishlist, products, setSelectedProduct, setSelectedPage, settings, customer } = useShop();
   const { isAdmin, setIsAdmin } = useAdmin();
   const [search, setSearch] = useState('');
   const [mobileMenu, setMobileMenu] = useState(false);
@@ -134,6 +135,11 @@ function Header() {
               {cart.length > 0 && <span className="absolute -top-1 -right-1 w-4.5 h-4.5 bg-coral-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center animate-pop">{faNum(cart.length)}</span>}
             </button>
           </div>
+          <button onClick={() => setView(customer ? 'account' : 'login')} title={customer ? 'حساب کاربری' : 'ورود / ثبت‌نام'} className="p-2 rounded-xl hover:bg-cream-100 transition-colors">
+            {customer
+              ? <span className="w-6 h-6 rounded-full bg-accent-500 text-brand-950 text-[10px] font-extrabold flex items-center justify-center">{(customer.name || customer.phone).slice(0, 2)}</span>
+              : <IconUser className="w-5 h-5 text-brand-900" />}
+          </button>
           <button onClick={() => setView('admin')} className="p-2 rounded-xl hover:bg-cream-100 transition-colors">
             <IconSettings className="w-5 h-5 text-brand-700" />
           </button>
@@ -445,7 +451,7 @@ function ShopView() {
 
 /* ─────────── Product Detail ─────────── */
 function ProductDetail() {
-  const { products, selectedProduct, reviews, setView, addToCart, toggleWishlist, wishlist, addToast } = useShop();
+  const { products, selectedProduct, reviews, setReviews, setView, addToCart, toggleWishlist, wishlist, addToast } = useShop();
   const product = products.find(p => p.id === selectedProduct);
   const [selSize, setSelSize] = useState('');
   const [selColor, setSelColor] = useState('');
@@ -461,10 +467,11 @@ function ProductDetail() {
   const liked = wishlist.includes(product.id);
   const fp = finalPrice(product.price, product.discount);
 
-  const submitReview = () => {
+  const submitReview = async () => {
     if (!reviewText || !reviewAuthor) return;
     const newReview = { id: `r-${Date.now()}`, productId: product.id, author: reviewAuthor, rating: reviewRating, text: reviewText, pros: [], cons: [], status: 'pending' as const, date: new Date().toLocaleDateString('fa-IR') };
-    // In real app would call setReviews
+    setReviews([...reviews, newReview]);
+    try { await api.catalog.submitReview(newReview); } catch {}
     addToast('info', 'نظر شما ثبت شد و پس از تأیید نمایش داده می‌شود');
     setReviewText(''); setReviewAuthor('');
   };
@@ -608,39 +615,71 @@ function ProductDetail() {
 
 /* ─────────── Cart View ─────────── */
 function CartView() {
-  const { cart, removeFromCart, updateCartQty, settings, appliedCode, setAppliedCode, validateCode, placeOrder, money, addToast } = useShop();
+  const { cart, removeFromCart, updateCartQty, settings, appliedCode, setAppliedCode, validateCode, placeOrder, money, addToast, customer, setCustomer } = useShop();
+  const { isAdmin } = useAdmin();
   const [code, setCode] = useState('');
   const [showCheckout, setShowCheckout] = useState(false);
   const [orderCode, setOrderCode] = useState('');
-  const [form, setForm] = useState({ name: '', mobile: '', city: '', address: '', postalCode: '' });
+  const [submitting, setSubmitting] = useState(false);
+  const [form, setForm] = useState(() => ({ name: customer?.name || '', mobile: customer?.phone || '', city: '', address: '', postalCode: '' }));
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [redeemPoints, setRedeemPoints] = useState(0);
+
+  useEffect(() => {
+    if (!customer || !api.getToken() || isAdmin) return;
+    let active = true;
+    api.auth.me().then(({ customer: latest }) => {
+      if (active) setCustomer(latest);
+    }).catch((error) => {
+      if (error.status !== 401) addToast('danger', `به‌روزرسانی موجودی امتیاز ناموفق بود: ${error.message}`);
+    });
+    return () => { active = false; };
+  }, [customer?.id, isAdmin, setCustomer, addToast]);
 
   const subtotal = cart.reduce((s, i) => s + finalPrice(i.product.price, i.product.discount) * i.qty, 0);
   const discountAmt = appliedCode ? codeAmount(appliedCode, subtotal) : 0;
+  const loyaltyEligibleAmount = Math.max(0, subtotal - discountAmt);
+  const loyaltyPointValue = customer?.loyaltyPointValue || 0;
+  const maxRedeemPoints = customer && loyaltyPointValue > 0
+    ? Math.min(
+      customer.loyaltyPoints || 0,
+      Math.floor(Math.floor(loyaltyEligibleAmount * (customer.loyaltyRedemptionCapPercent ?? 10) / 100) / loyaltyPointValue),
+    )
+    : 0;
+  const appliedRedeemPoints = Math.min(redeemPoints, maxRedeemPoints);
+  const loyaltyDiscountAmt = appliedRedeemPoints * loyaltyPointValue;
   const shipping = subtotal >= settings.freeShippingThreshold ? 0 : settings.shippingCost;
   const taxRate = settings.showPricesWithTax ? (settings.vatRate + settings.levyRate) / 100 : 0;
-  const tax = Math.round((subtotal - discountAmt) * taxRate);
-  const total = subtotal - discountAmt + shipping + tax;
+  const tax = Math.round((subtotal - discountAmt - loyaltyDiscountAmt) * taxRate);
+  const total = subtotal - discountAmt - loyaltyDiscountAmt + shipping + tax;
   const progressToFree = Math.min(100, (subtotal / settings.freeShippingThreshold) * 100);
 
-  const applyCode = () => {
-    const result = validateCode(code);
+  useEffect(() => {
+    setRedeemPoints((current) => Math.min(current, maxRedeemPoints));
+  }, [maxRedeemPoints]);
+
+  const applyCode = async () => {
+    const result = await validateCode(code, subtotal);
     if (result.error) { addToast('danger', result.error); return; }
     setAppliedCode(result.code);
     addToast('success', 'کد تخفیف اعمال شد');
   };
 
-  const submitOrder = () => {
+  const submitOrder = async () => {
     const errs: Record<string, string> = {};
     if (!form.name) errs.name = 'نام الزامی است';
     if (!form.mobile || form.mobile.length < 11) errs.mobile = 'شماره موبایل معتبر وارد کنید';
     if (!form.city) errs.city = 'شهر الزامی است';
     if (!form.address) errs.address = 'آدرس الزامی است';
     if (Object.keys(errs).length) { setErrors(errs); return; }
-    const code = placeOrder(form);
-    setOrderCode(code);
-    setShowCheckout(false);
-    addToast('success', 'سفارش شما با موفقیت ثبت شد');
+    setSubmitting(true);
+    try {
+      await placeOrder({ ...form, redeemPoints: appliedRedeemPoints }); // کاربر به درگاه پرداخت زرین‌پال هدایت می‌شود
+    } catch (e: any) {
+      setSubmitting(false);
+      setShowCheckout(false);
+      addToast('danger', e?.fields ? Object.values(e.fields)[0] as string : (e?.message || 'خطا در ثبت سفارش'));
+    }
   };
 
   if (orderCode) return (
@@ -696,6 +735,7 @@ function CartView() {
           <div className="space-y-2 text-[12px]">
             <div className="flex justify-between"><span className="text-cream-500">جمع اقلام</span><span className="font-bold">{formatPrice(subtotal)} تومان</span></div>
             {discountAmt > 0 && <div className="flex justify-between text-emerald-600"><span>تخفیف کد</span><span className="font-bold">-{formatPrice(discountAmt)} تومان</span></div>}
+            {loyaltyDiscountAmt > 0 && <div className="flex justify-between text-emerald-600"><span>تخفیف امتیاز ({faNum(appliedRedeemPoints)})</span><span className="font-bold">-{formatPrice(loyaltyDiscountAmt)} تومان</span></div>}
             <div className="flex justify-between"><span className="text-cream-500">هزینه ارسال</span><span className="font-bold">{shipping === 0 ? 'رایگان' : formatPrice(shipping) + ' تومان'}</span></div>
             {tax > 0 && <div className="flex justify-between"><span className="text-cream-500">مالیات</span><span className="font-bold">{formatPrice(tax)} تومان</span></div>}
             <div className="border-t border-cream-200 pt-2 flex justify-between"><span className="font-bold text-brand-900">مبلغ قابل پرداخت</span><span className="font-extrabold text-brand-900 text-[14px]">{formatPrice(total)} تومان</span></div>
@@ -704,6 +744,16 @@ function CartView() {
             <input value={code} onChange={e => setCode(e.target.value)} placeholder="کد تخفیف" className="flex-1 rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" />
             <button onClick={applyCode} className="bg-brand-900 text-white px-3 py-2 rounded-xl text-[11px] font-bold">اعمال</button>
           </div>
+          {customer && (
+            <div className="mt-3 rounded-xl border border-cream-200 bg-cream-50 p-3">
+              <div className="flex justify-between text-[11px]">
+                <span>امتیاز قابل استفاده</span><span className="font-bold">{faNum(customer.loyaltyPoints || 0)}</span>
+              </div>
+              <label className="mt-2 block text-[10px] text-cream-500">حداکثر {customer.loyaltyRedemptionCapPercent ?? 10}٪ مبلغ کالای پس از تخفیف</label>
+              <input type="number" min="0" max={maxRedeemPoints} step="1" value={redeemPoints} onChange={e => setRedeemPoints(Math.max(0, Math.floor(Number(e.target.value) || 0)))} disabled={maxRedeemPoints === 0} className="mt-1 w-full rounded-lg border border-cream-300 bg-white px-3 py-2 text-[12px] disabled:opacity-50" />
+              {maxRedeemPoints === 0 && <p className="mt-1 text-[10px] text-cream-500">برای این سفارش امتیاز قابل بازخرید ندارید.</p>}
+            </div>
+          )}
           <button onClick={() => setShowCheckout(true)} className="w-full mt-4 bg-brand-900 text-white py-3 rounded-xl font-extrabold text-sm hover:bg-brand-700 transition-colors">تکمیل خرید</button>
           <div className="mt-3 space-y-1.5">
             {[{ icon: <IconLock className="w-3.5 h-3.5" />, t: 'پرداخت امن شاپرک' }, { icon: <IconTruck className="w-3.5 h-3.5" />, t: 'ارسال از انبار تهران' }].map((s, i) => (
@@ -729,7 +779,7 @@ function CartView() {
                 <input value={form.postalCode} onChange={e => setForm({ ...form, postalCode: e.target.value })} placeholder="کد پستی" className="w-full rounded-xl border border-cream-300 px-3 py-2.5 text-[13px] outline-none" />
               </div>
             </div>
-            <button onClick={submitOrder} className="w-full mt-4 bg-brand-900 text-white py-3 rounded-xl font-extrabold text-sm">ثبت سفارش و پرداخت</button>
+            <button onClick={submitOrder} disabled={submitting} className="w-full mt-4 bg-brand-900 text-white py-3 rounded-xl font-extrabold text-sm disabled:opacity-60">{submitting ? 'در حال انتقال به درگاه پرداخت...' : 'ثبت سفارش و پرداخت'}</button>
           </div>
         </div>
       )}
@@ -854,10 +904,17 @@ function AdminLogin() {
   const [user, setUser] = useState('');
   const [pass, setPass] = useState('');
   const [err, setErr] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const login = () => {
-    if (user === 'admin' && pass === 'admin123') { setIsAdmin(true); setErr(''); }
-    else setErr('نام کاربری یا رمز عبور اشتباه است');
+  const login = async () => {
+    setErr(''); setLoading(true);
+    try {
+      const res = await api.auth.adminLogin(user, pass);
+      api.setToken(res.token); // توکن ادمین برای فراخوانی‌های محافظت‌شده
+      setIsAdmin(true);
+    } catch (e: any) {
+      setErr(e.message || 'نام کاربری یا رمز عبور اشتباه است');
+    } finally { setLoading(false); }
   };
 
   return (
@@ -875,15 +932,15 @@ function AdminLogin() {
         <div className="space-y-3">
           <div>
             <label className="text-[11px] font-bold text-brand-700 mb-1 block">نام کاربری</label>
-            <input value={user} onChange={e => setUser(e.target.value)} placeholder="admin" className="w-full rounded-xl border border-cream-300 bg-cream-50 px-4 py-2.5 text-[13px] outline-none focus:border-brand-400 focus:ring-4 focus:ring-brand-100" />
+            <input value={user} onChange={e => setUser(e.target.value)} placeholder="نام کاربری" className="w-full rounded-xl border border-cream-300 bg-cream-50 px-4 py-2.5 text-[13px] outline-none focus:border-brand-400 focus:ring-4 focus:ring-brand-100" />
           </div>
           <div>
             <label className="text-[11px] font-bold text-brand-700 mb-1 block">رمز عبور</label>
-            <input type="password" value={pass} onChange={e => setPass(e.target.value)} placeholder="admin123" className="w-full rounded-xl border border-cream-300 bg-cream-50 px-4 py-2.5 text-[13px] outline-none focus:border-brand-400 focus:ring-4 focus:ring-brand-100" onKeyDown={e => e.key === 'Enter' && login()} />
+            <input type="password" value={pass} onChange={e => setPass(e.target.value)} placeholder="رمز عبور" className="w-full rounded-xl border border-cream-300 bg-cream-50 px-4 py-2.5 text-[13px] outline-none focus:border-brand-400 focus:ring-4 focus:ring-brand-100" onKeyDown={e => e.key === 'Enter' && login()} />
           </div>
           {err && <p className="text-[11px] text-coral-600 font-bold">{err}</p>}
-          <button onClick={login} className="w-full bg-brand-900 text-white py-3 rounded-xl font-extrabold text-sm hover:bg-brand-700 transition-colors shadow-lg shadow-brand-900/25">ورود به پنل</button>
-          <button onClick={() => { setUser('admin'); setPass('admin123'); }} className="w-full border border-cream-300 py-2.5 rounded-xl text-[12px] font-bold text-brand-700 hover:border-accent-500 transition-colors">ورود سریع با حساب آزمایشی</button>
+          <button onClick={login} disabled={loading} className="w-full bg-brand-900 text-white py-3 rounded-xl font-extrabold text-sm hover:bg-brand-700 transition-colors shadow-lg shadow-brand-900/25 disabled:opacity-60">{loading ? 'در حال ورود...' : 'ورود به پنل'}</button>
+          {import.meta.env.DEV && <button onClick={() => { setUser('admin'); setPass('admin123'); }} className="w-full border border-cream-300 py-2.5 rounded-xl text-[12px] font-bold text-brand-700 hover:border-accent-500 transition-colors">ورود سریع با حساب آزمایشی</button>}
           <button onClick={() => setView('home')} className="w-full text-[12px] text-cream-500 hover:text-brand-700 mt-2">بازگشت به فروشگاه</button>
         </div>
       </div>
@@ -895,13 +952,15 @@ function AdminLogin() {
 function AdminPanel() {
   const admin = useAdmin();
   const shop = useShop();
-  const { isAdmin, setIsAdmin, darkMode, toggleDark, currentRole, setRole, roles, adminSection, setAdminSection } = admin;
+  const { isAdmin, setIsAdmin, darkMode, toggleDark, currentRole, adminIdentity, adminSection, setAdminSection } = admin;
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const allowedSections = adminIdentity?.sections || [];
+  const visibleSection = allowedSections.includes(adminSection)
+    ? adminSection
+    : allowedSections.includes('home') ? 'home' : allowedSections[0] || 'home';
 
   if (!isAdmin) return <AdminLogin />;
-
-  const currentRoleData = roles.find((r: any) => r.name === currentRole);
-  const allowedSections = currentRoleData?.sections || [];
+  if (!adminIdentity) return <div className="min-h-screen grid place-items-center text-sm text-cream-500">در حال بررسی دسترسی مدیر...</div>;
 
   const sections = [
     { id: 'home', label: 'نمای کلی', icon: <IconHome className="w-5 h-5" /> },
@@ -939,13 +998,13 @@ function AdminPanel() {
         </div>
         <nav className="p-3 space-y-1">
           {sections.map(s => (
-            <button key={s.id} onClick={() => { setAdminSection(s.id); setSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[12px] font-bold transition-all ${adminSection === s.id ? 'bg-brand-600/15 text-accent-500 border-r-2 border-accent-500' : 'text-brand-100/70 hover:bg-white/5 hover:text-white'}`}>
+            <button key={s.id} onClick={() => { setAdminSection(s.id); setSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[12px] font-bold transition-all ${visibleSection === s.id ? 'bg-brand-600/15 text-accent-500 border-r-2 border-accent-500' : 'text-brand-100/70 hover:bg-white/5 hover:text-white'}`}>
               {s.icon}<span>{s.label}</span>
             </button>
           ))}
         </nav>
         <div className="p-3 border-t border-white/5 mt-4">
-          <button onClick={() => { setIsAdmin(false); shop.setView('home'); }} className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[12px] font-bold text-coral-400 hover:bg-white/5"><IconLogout className="w-4 h-4" />خروج</button>
+          <button onClick={() => { setIsAdmin(false); api.setToken(null); shop.setView('home'); }} className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[12px] font-bold text-coral-400 hover:bg-white/5"><IconLogout className="w-4 h-4" />خروج</button>
         </div>
       </aside>
 
@@ -956,13 +1015,13 @@ function AdminPanel() {
           <div className="flex items-center justify-between px-4 sm:px-6 py-3">
             <div className="flex items-center gap-3">
               <button className="lg:hidden" onClick={() => setSidebarOpen(!sidebarOpen)}><IconMenu className="w-5 h-5" /></button>
-              <h1 className={`font-display text-xl sm:text-2xl ${darkMode ? 'text-white' : 'text-brand-900'}`}>{sectionTitles[adminSection] || 'نمای کلی'}</h1>
+              <h1 className={`font-display text-xl sm:text-2xl ${darkMode ? 'text-white' : 'text-brand-900'}`}>{sectionTitles[visibleSection] || 'نمای کلی'}</h1>
             </div>
             <div className="flex items-center gap-3">
               <span className={`text-[11px] ${darkMode ? 'text-brand-300' : 'text-cream-500'}`}>{faDateFull()}</span>
-              <select value={currentRole} onChange={e => setRole(e.target.value)} className={`rounded-xl border px-2 py-1.5 text-[11px] font-bold ${darkMode ? 'bg-[#1a212c] border-white/10 text-white' : 'border-cream-300 bg-white text-brand-900'}`}>
-                {roles.map((r: any) => <option key={r.id} value={r.name}>{r.name}</option>)}
-              </select>
+              <span className={`rounded-xl border px-2 py-1.5 text-[11px] font-bold ${darkMode ? 'bg-[#1a212c] border-white/10 text-white' : 'border-cream-300 bg-white text-brand-900'}`} title={adminIdentity.username}>
+                {adminIdentity.name} · {currentRole}
+              </span>
               <button onClick={toggleDark} className={`p-2 rounded-xl ${darkMode ? 'bg-white/5 text-accent-500' : 'bg-cream-100 text-brand-700'}`}>{darkMode ? <IconSun className="w-4 h-4" /> : <IconMoon className="w-4 h-4" />}</button>
               <div className="relative">
                 <IconBell className={`w-5 h-5 ${darkMode ? 'text-brand-300' : 'text-brand-700'}`} />
@@ -974,7 +1033,7 @@ function AdminPanel() {
 
         {/* Content */}
         <main className="p-4 sm:p-6 lg:p-8 max-w-7xl animate-fade">
-          <AdminContent section={adminSection} />
+          <AdminContent section={visibleSection} />
         </main>
       </div>
     </div>
@@ -1019,7 +1078,7 @@ function AdminHome() {
     const d = new Date(); d.setDate(d.getDate() - (13 - i));
     const ds = d.toISOString().slice(0, 10);
     const dayOrders = orders.filter((o: any) => o.createdAt?.slice(0, 10) === ds);
-    return { day: faNum(d.getDate()), revenue: dayOrders.reduce((s: number, o: any) => s + (o.total || 0), 0) };
+    return { day: faNum(d.getDate()), revenue: dayOrders.filter(isPaidOrder).reduce((s: number, o: any) => s + collectedAmount(o), 0) };
   });
   const statusCounts = ['pending', 'processing', 'shipped', 'delivered', 'cancelled'].map(s => ({
     name: s, value: orders.filter((o: any) => o.status === s).length
@@ -1034,8 +1093,8 @@ function AdminHome() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[{ l: 'سفارش‌های امروز', v: faNum(stats.todayOrders), icon: <IconClipboard className="w-5 h-5" />, c: 'bg-blue-50 text-blue-700' },
           { l: 'مشتریان یکتا', v: faNum(stats.uniqueCustomers), icon: <IconUsers className="w-5 h-5" />, c: 'bg-emerald-50 text-emerald-700' },
-          { l: 'نرخ تبدیل', v: `${faNum(stats.conversionRate)}٪`, icon: <IconTrending className="w-5 h-5" />, c: 'bg-purple-50 text-purple-700' },
-          { l: 'فروش ۳۰ روزه', v: formatPrice(stats.totalRevenue), icon: <IconDollar className="w-5 h-5" />, c: 'bg-amber-50 text-amber-700' }
+          { l: 'نرخ تبدیل', v: stats.conversionRate === null ? '—' : `${faNum(stats.conversionRate)}٪`, icon: <IconTrending className="w-5 h-5" />, c: 'bg-purple-50 text-purple-700' },
+          { l: 'فروش پرداخت‌شده', v: formatPrice(stats.totalRevenue), icon: <IconDollar className="w-5 h-5" />, c: 'bg-amber-50 text-amber-700' }
         ].map((k, i) => (
           <div key={i} className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-4`}>
             <div className={`w-9 h-9 rounded-xl ${k.c} flex items-center justify-center mb-2`}>{k.icon}</div>
@@ -1134,24 +1193,35 @@ function AdminHome() {
 
 /* ─────────── Admin Orders ─────────── */
 function AdminOrders() {
-  const { orders, setOrders, darkMode, log } = useAdmin();
+  const { darkMode, log } = useAdmin();
+  const { addToast } = useShop();
+  const [orders, setOrders] = useState<any[]>([]);
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<any>(null);
+  useEffect(() => {
+    api.orders.list().then((r: any) => setOrders(r.items || r || [])).catch((error) => {
+      addToast('danger', `بارگذاری سفارش‌ها ناموفق بود: ${error.message}`);
+    });
+  }, [addToast]);
   const filtered = orders.filter((o: any) => {
     if (filter !== 'all' && o.status !== filter) return false;
-    if (search && !o.code.includes(search) && !o.customer.includes(search) && !o.mobile.includes(search)) return false;
+    if (search && !String(o.code||'').includes(search) && !String(o.customer||o.name||'').includes(search) && !String(o.mobile||'').includes(search)) return false;
     return true;
   });
   const statusColors: Record<string, string> = { pending: 'bg-cream-100 text-brand-700', processing: 'bg-amber-100 text-amber-700', shipped: 'bg-blue-100 text-blue-700', delivered: 'bg-emerald-100 text-emerald-700', cancelled: 'bg-coral-100 text-coral-700' };
   const statuses = ['pending', 'processing', 'shipped', 'delivered', 'cancelled'];
   const statusLabels: Record<string, string> = { pending: 'در انتظار', processing: 'در حال پردازش', shipped: 'ارسال شده', delivered: 'تحویل شده', cancelled: 'لغو شده' };
-
-  const changeStatus = (order: any, status: string) => {
-    const updated = orders.map((o: any) => o.id === order.id ? { ...o, status } : o);
-    setOrders(updated);
-    log(`تغییر وضعیت سفارش ${order.code} به ${statusLabels[status]}`, order.id);
-    if (selected?.id === order.id) setSelected({ ...order, status });
+  const changeStatus = async (order: any, status: string) => {
+    try {
+      const saved = await api.orders.updateStatus(order.id, status);
+      setOrders(orders.map((item: any) => item.id === saved.id ? saved : item));
+      log(`تغییر وضعیت سفارش ${order.code} به ${statusLabels[status]}`, order.id);
+      if (selected?.id === order.id) setSelected(saved);
+      addToast('success', 'وضعیت سفارش ذخیره شد');
+    } catch (error: any) {
+      addToast('danger', `تغییر وضعیت سفارش ناموفق بود: ${error.message}`);
+    }
   };
 
   return (
@@ -1230,7 +1300,13 @@ function AdminOrders() {
 
 /* ─────────── Admin Products ─────────── */
 function AdminProducts() {
-  const { products, setProducts, setView, setSelectedProduct } = useShop();
+  const [products, setProducts] = useState<any[]>([]);
+  const { setView, setSelectedProduct, setProducts: setShopProducts, addToast } = useShop();
+  useEffect(() => {
+    api.catalog.products('?limit=1000&includeInactive=true')
+      .then((r: any) => setProducts(r.items || []))
+      .catch((error) => addToast('danger', `بارگذاری محصولات ناموفق بود: ${error.message}`));
+  }, [addToast]);
   const { darkMode, log } = useAdmin();
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState('');
@@ -1263,22 +1339,37 @@ function AdminProducts() {
   const outOfStock = products.filter(p => p.stock === 0).length;
   const criticalStock = products.filter(p => getStockStatus(p) === 'critical').length;
 
-  const saveProduct = () => {
-    if (editing.id) {
-      setProducts(products.map(p => p.id === editing.id ? editing : p));
-      log(`ویرایش محصول ${editing.name}`, editing.id);
-    } else {
-      const newP = { ...editing, id: `p-${Date.now()}` };
-      setProducts([...products, newP]);
-      log(`افزودن محصول ${editing.name}`, newP.id);
+  const saveProduct = async () => {
+    try {
+      const saved = editing.id
+        ? await api.catalog.updateProduct(editing.id, editing)
+        : await api.catalog.createProduct({ ...editing, id: `p-${Date.now()}` });
+      const product = saved?.product || saved;
+      const next = editing.id
+        ? products.map((item) => item.id === product.id ? product : item)
+        : [...products, product];
+      setProducts(next);
+      setShopProducts(next);
+      log(`${editing.id ? 'ویرایش' : 'افزودن'} محصول ${product.name}`, product.id);
+      addToast('success', 'محصول ذخیره شد');
+      setShowForm(false);
+      setEditing(null);
+    } catch (error: any) {
+      addToast('danger', `ذخیره محصول ناموفق بود: ${error.message}`);
     }
-    setShowForm(false); setEditing(null);
   };
-
-  const deleteProduct = (id: string) => {
+  const deleteProduct = async (id: string) => {
     if (confirm('آیا از حذف این محصول مطمئن هستید؟')) {
-      setProducts(products.filter(p => p.id !== id));
-      log(`حذف محصول`, id, 'warning');
+      try {
+        await api.catalog.deleteProduct(id);
+        const next = products.filter((product) => product.id !== id);
+        setProducts(next);
+        setShopProducts(next);
+        log('حذف محصول', id, 'warning');
+        addToast('success', 'محصول حذف شد');
+      } catch (error: any) {
+        addToast('danger', `حذف محصول ناموفق بود: ${error.message}`);
+      }
     }
   };
 
@@ -1419,7 +1510,18 @@ function AdminProducts() {
                     {statusConfig.label}
                   </span>
                 </td>
-                <td className="py-2 px-3"><button onClick={() => { setProducts(products.map(x => x.id === p.id ? { ...x, effective: !x.effective } : x)); }} className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${p.effective ? 'bg-emerald-100 text-emerald-700' : 'bg-cream-100 text-cream-500'}`}>{p.effective ? 'فعال' : 'غیرفعال'}</button></td>
+                <td className="py-2 px-3"><button onClick={async () => {
+                  const updated = { ...p, effective: !p.effective };
+                  try {
+                    await api.catalog.updateProduct(p.id, updated);
+                    const next = products.map((item) => item.id === p.id ? updated : item);
+                    setProducts(next);
+                    setShopProducts(next);
+                    log(`${updated.effective ? 'فعال' : 'غیرفعال'} کردن محصول ${p.name}`, p.id);
+                  } catch (error: any) {
+                    addToast('danger', `تغییر وضعیت محصول ناموفق بود: ${error.message}`);
+                  }
+                }} className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${p.effective ? 'bg-emerald-100 text-emerald-700' : 'bg-cream-100 text-cream-500'}`}>{p.effective ? 'فعال' : 'غیرفعال'}</button></td>
                 <td className="py-2 px-3 flex gap-1">
                   <button onClick={() => { setEditing(p); setShowForm(true); }} className="p-1.5 rounded-lg hover:bg-cream-100 text-brand-600"><IconEdit className="w-3.5 h-3.5" /></button>
                   <button onClick={() => deleteProduct(p.id)} className="p-1.5 rounded-lg hover:bg-coral-50 text-coral-500"><IconTrash className="w-3.5 h-3.5" /></button>
@@ -1493,12 +1595,11 @@ function AdminReports() {
     const d = new Date(); 
     d.setDate(d.getDate() - (days - 1 - i)); 
     const ds = d.toISOString().slice(0, 10); 
-    const dayOrders = orders.filter((o: any) => o.createdAt?.slice(0, 10) === ds); 
+    const dayOrders = orders.filter((o: any) => o.createdAt?.slice(0, 10) === ds && isPaidOrder(o));
     return { 
       day: faNum(d.getDate()), 
       date: ds,
-      revenue: dayOrders.reduce((s: number, o: any) => s + (o.subtotal || 0), 0), 
-      profit: dayOrders.reduce((s: number, o: any) => s + (o.total || 0) * 0.3, 0),
+      revenue: dayOrders.reduce((s: number, o: any) => s + collectedAmount(o), 0),
       orders: dayOrders.length,
       customers: new Set(dayOrders.map((o: any) => o.mobile)).size
     }; 
@@ -1527,6 +1628,7 @@ function AdminReports() {
 
   return (
     <div className="space-y-4">
+      <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] leading-5 text-amber-800">گزارش سود و زیان برآوردی است: بهای تمام‌شده و برخی هزینه‌ها بر اساس فرض‌های ثابت محاسبه می‌شوند. برای گزارش حسابداری، دادهٔ بهای خرید و هزینه‌های واقعی باید ثبت و دسته‌بندی شوند.</p>
       {/* Period Selector */}
       <div className="flex items-center justify-between">
         <h2 className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-brand-900'}`}>گزارش‌ها و تحلیل</h2>
@@ -1541,9 +1643,9 @@ function AdminReports() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
           { l: 'درآمد ناخالص', v: formatPrice(pl.grossSales), c: 'bg-blue-50 text-blue-700', icon: <IconDollar className="w-5 h-5" />, growth: growthRate },
-          { l: 'سود خالص', v: formatPrice(pl.netProfit), c: 'bg-emerald-50 text-emerald-700', icon: <IconTrending className="w-5 h-5" />, growth: growthRate * 0.8 },
+          { l: 'سود خالص برآوردی', v: formatPrice(pl.netProfit), c: 'bg-emerald-50 text-emerald-700', icon: <IconTrending className="w-5 h-5" />, growth: 0 },
           { l: 'حاشیه سود', v: `${faNum(pl.margin)}٪`, c: 'bg-purple-50 text-purple-700', icon: <IconChart className="w-5 h-5" />, growth: 0 },
-          { l: 'میانگین سفارش', v: formatPrice(orders.length ? pl.netRevenue / orders.length : 0), c: 'bg-amber-50 text-amber-700', icon: <IconCart className="w-5 h-5" />, growth: growthRate * 0.5 },
+          { l: 'میانگین سفارش', v: formatPrice(orders.length ? pl.netRevenue / orders.length : 0), c: 'bg-amber-50 text-amber-700', icon: <IconCart className="w-5 h-5" />, growth: 0 },
         ].map((k, i) => (
           <div key={i} className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-4 hover:shadow-lg transition-all`}>
             <div className="flex items-center justify-between mb-2">
@@ -1566,12 +1668,11 @@ function AdminReports() {
       <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'}`}>روند درآمد و سود</h3>
+            <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'}`}>روند فروش پرداخت‌شده</h3>
             <p className="text-[10px] text-cream-500 mt-0.5">{faNum(days)} روز اخیر</p>
           </div>
           <div className="flex gap-3 text-[10px]">
             <div className="flex items-center gap-1"><div className="w-3 h-3 rounded bg-brand-900"></div><span>درآمد</span></div>
-            <div className="flex items-center gap-1"><div className="w-3 h-3 rounded bg-accent-500"></div><span>سود</span></div>
           </div>
         </div>
         <ResponsiveContainer width="100%" height={280}>
@@ -1603,7 +1704,6 @@ function AdminReports() {
               formatter={(value: any) => [formatPrice(value) + ' تومان', '']}
             />
             <Area type="monotone" dataKey="revenue" fill="url(#colorRevenue)" stroke="#1A2238" strokeWidth={2} name="درآمد" />
-            <Line type="monotone" dataKey="profit" stroke="#F5C518" strokeWidth={3} dot={{ fill: '#F5C518', r: 3 }} name="سود" />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
@@ -1764,13 +1864,14 @@ function AdminReports() {
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'}`}>قیف تبدیل خرید</h3>
-            <p className="text-[10px] text-cream-500 mt-0.5">مراحل تبدیل بازدیدکننده به مشتری</p>
+            <p className="text-[10px] text-cream-500 mt-0.5">نیازمند ثبت رویدادهای بازدید و سبد خرید</p>
           </div>
           <div className={`px-3 py-1.5 rounded-xl text-[10px] font-bold ${darkMode ? 'bg-coral-900/30 text-coral-300' : 'bg-coral-50 text-coral-700'}`}>
-            گلوگاه: {bn}
+            {bn ? `گلوگاه: ${bn}` : 'دادهٔ قیف موجود نیست'}
           </div>
         </div>
         <div className="space-y-3">
+          {funnel.length === 0 && <p className="py-6 text-center text-[11px] text-cream-500">آمار بازدید، افزودن به سبد و پرداخت هنوز جمع‌آوری نمی‌شود؛ برای جلوگیری از نمایش تخمین ساختگی، قیف خالی است.</p>}
           {funnel.map((f, i) => {
             const width = (f.rate / 100) * 100;
             const colors = ['bg-brand-900', 'bg-blue-600', 'bg-purple-600', 'bg-emerald-600'];
@@ -1896,7 +1997,7 @@ function AdminReports() {
 
 function AdminInvoices() {
   const { orders, invoices, setInvoices, darkMode, log } = useAdmin();
-  const { settings } = useShop();
+  const { settings, addToast } = useShop();
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -1906,6 +2007,22 @@ function AdminInvoices() {
     if (search && !inv.number.includes(search) && !inv.customer.includes(search)) return false;
     return true;
   });
+
+  const settleInvoice = async (invoice: any) => {
+    const paymentReference = window.prompt('شماره پیگیری درگاه یا رسید بانکی را وارد کنید:');
+    if (!paymentReference?.trim()) return;
+    try {
+      const saved = await api.finance.invoices.update(invoice.id, {
+        ...invoice, status: 'paid', paymentReference: paymentReference.trim(),
+      });
+      setInvoices(invoices.map((item: any) => item.id === saved.id ? saved : item));
+      setSelectedInvoice((current: any) => current?.id === saved.id ? saved : current);
+      log(`ثبت تسویه فاکتور ${saved.number}`, saved.id);
+      addToast('success', 'تسویه فاکتور با مرجع پرداخت ثبت شد');
+    } catch (error: any) {
+      addToast('danger', `ثبت تسویه ناموفق بود: ${error.message}`);
+    }
+  };
 
   const printInvoice = (inv: any) => {
     const order = orders.find((o: any) => o.id === inv.orderId);
@@ -2094,7 +2211,7 @@ function AdminInvoices() {
                         <IconPrint className="w-4 h-4" />
                       </button>
                       {inv.status !== 'paid' && (
-                        <button onClick={() => { setInvoices(invoices.map((x: any) => x.id === inv.id ? { ...x, status: 'paid' } : x)); log(`تسویه فاکتور ${inv.number}`, inv.id); }} className="p-1.5 rounded-lg hover:bg-emerald-50 text-emerald-600" title="تسویه">
+                        <button onClick={() => settleInvoice(inv)} className="p-1.5 rounded-lg hover:bg-emerald-50 text-emerald-600" title="ثبت تسویه با مرجع پرداخت">
                           <IconCheck className="w-4 h-4" />
                         </button>
                       )}
@@ -2120,8 +2237,8 @@ function AdminInvoices() {
                 <IconPrint className="w-4 h-4" /> چاپ فاکتور
               </button>
               {selectedInvoice.status !== 'paid' && (
-                <button onClick={() => { setInvoices(invoices.map((x: any) => x.id === selectedInvoice.id ? { ...x, status: 'paid' } : x)); setSelectedInvoice(null); log(`تسویه فاکتور ${selectedInvoice.number}`, selectedInvoice.id); }} className="px-4 py-2.5 rounded-xl border border-cream-300 text-[12px] font-bold">
-                  تسویه فاکتور
+                <button onClick={() => settleInvoice(selectedInvoice)} className="px-4 py-2.5 rounded-xl border border-cream-300 text-[12px] font-bold">
+                  ثبت تسویه فاکتور
                 </button>
               )}
             </div>
@@ -2256,8 +2373,10 @@ function AdminFinance() {
 
   const exportPL = () => { 
     const data = [
+      { 'عنوان': 'یادداشت', 'مبلغ (تومان)': 'بهای تمام‌شده و برخی هزینه‌ها برآوردی هستند؛ خروجی حسابداری نیست' },
       { 'عنوان': 'فروش ناخالص', 'مبلغ (تومان)': pl.grossSales },
       { 'عنوان': 'تخفیفات', 'مبلغ (تومان)': -pl.discounts },
+      { 'عنوان': 'بازپرداخت مرجوعی', 'مبلغ (تومان)': -pl.refunds },
       { 'عنوان': 'درآمد خالص', 'مبلغ (تومان)': pl.netRevenue },
       { 'عنوان': 'بهای تمام‌شده', 'مبلغ (تومان)': -pl.cogs },
       { 'عنوان': 'سود ناخالص', 'مبلغ (تومان)': pl.grossProfit },
@@ -2284,13 +2403,14 @@ function AdminFinance() {
 
   return (
     <div className="space-y-4">
+      <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] leading-5 text-amber-800">سود و حاشیهٔ سود در این بخش برآوردی است و نباید مبنای گزارش حسابداری یا تصمیم پرداخت قرار گیرد. هزینه‌های واقعی ثبت‌شده و تراکنش‌های بانکی در زبانه‌های جداگانه قابل مشاهده‌اند.</p>
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
-          { l: 'درآمد خالص', v: formatPrice(pl.netRevenue), c: 'bg-blue-50 text-blue-700', icon: <IconDollar className="w-5 h-5" />, trend: '+12%' },
-          { l: 'سود خالص', v: formatPrice(pl.netProfit), c: 'bg-emerald-50 text-emerald-700', icon: <IconTrending className="w-5 h-5" />, trend: '+8%' },
-          { l: 'جریان نقدی', v: formatPrice(netCashFlow), c: netCashFlow >= 0 ? 'bg-green-50 text-green-700' : 'bg-coral-50 text-coral-700', icon: <IconChart className="w-5 h-5" />, trend: netCashFlow >= 0 ? '+' : '' },
-          { l: 'حاشیه سود', v: `${faNum(netMargin.toFixed(1))}٪`, c: 'bg-purple-50 text-purple-700', icon: <IconStar className="w-5 h-5" />, trend: '+2%' },
+          { l: 'درآمد خالص ثبت‌شده', v: formatPrice(pl.netRevenue), c: 'bg-blue-50 text-blue-700', icon: <IconDollar className="w-5 h-5" /> },
+          { l: 'سود خالص برآوردی', v: formatPrice(pl.netProfit), c: 'bg-emerald-50 text-emerald-700', icon: <IconTrending className="w-5 h-5" /> },
+          { l: 'جریان نقدی ثبت‌شده', v: formatPrice(netCashFlow), c: netCashFlow >= 0 ? 'bg-green-50 text-green-700' : 'bg-coral-50 text-coral-700', icon: <IconChart className="w-5 h-5" /> },
+          { l: 'حاشیه سود برآوردی', v: `${faNum(netMargin.toFixed(1))}٪`, c: 'bg-purple-50 text-purple-700', icon: <IconStar className="w-5 h-5" /> },
         ].map((k, i) => (
           <div key={i} className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-4 hover:shadow-lg transition-all`}>
             <div className="flex items-center justify-between mb-2">
@@ -2298,11 +2418,6 @@ function AdminFinance() {
               <div className={`${k.c} p-1.5 rounded-lg`}>{k.icon}</div>
             </div>
             <p className={`text-lg font-extrabold tnum ${darkMode ? 'text-white' : 'text-brand-900'}`}>{k.v}</p>
-            <div className="flex items-center gap-1 mt-1 text-[10px] text-emerald-600 font-bold">
-              <IconTrending className="w-3 h-3" />
-              <span>{k.trend}</span>
-              <span className="text-cream-500 font-normal">نسبت به ماه قبل</span>
-            </div>
           </div>
         ))}
       </div>
@@ -2341,6 +2456,7 @@ function AdminFinance() {
                 {[
                   { l: 'فروش ناخالص', v: pl.grossSales, type: 'income' },
                   { l: 'تخفیفات', v: -pl.discounts, type: 'deduction' },
+                  { l: 'بازپرداخت‌های مرجوعی', v: -pl.refunds, type: 'deduction' },
                   { l: 'درآمد خالص', v: pl.netRevenue, type: 'subtotal' },
                   { l: 'بهای تمام‌شده کالا', v: -pl.cogs, type: 'deduction' },
                   { l: 'سود ناخالص', v: pl.grossProfit, type: 'subtotal' },
@@ -2637,8 +2753,8 @@ function AdminFinance() {
           <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'}`}>پیش‌بینی جریان نقدی ۱۴ روز آینده</h3>
-                <p className="text-[10px] text-cream-500 mt-0.5">تحلیل ورودی، خروجی و مانده نقدینگی</p>
+                <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'}`}>پیش‌بینی جریان نقدی</h3>
+                <p className="text-[10px] text-cream-500 mt-0.5">نیازمند دادهٔ واقعی تراکنش‌ها و تعهدات آینده</p>
               </div>
               <div className="flex gap-3 text-[10px]">
                 <div className="flex items-center gap-1"><div className="w-3 h-3 rounded bg-brand-900"></div><span>ورودی</span></div>
@@ -2646,7 +2762,7 @@ function AdminFinance() {
                 <div className="flex items-center gap-1"><div className="w-3 h-3 rounded bg-accent-500"></div><span>مانده</span></div>
               </div>
             </div>
-            <div className="h-72">
+            {cf.length ? <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={cf}>
                   <defs>
@@ -2669,7 +2785,7 @@ function AdminFinance() {
                   <Line type="monotone" dataKey="balance" stroke="#F5C518" strokeWidth={3} name="مانده" dot={{ fill: '#F5C518', r: 4 }} />
                 </ComposedChart>
               </ResponsiveContainer>
-            </div>
+            </div> : <p className="py-10 text-center text-[11px] text-cream-500">تا زمان اتصال داده‌های بانکی و ثبت هزینه‌های آینده، پیش‌بینی قابل اتکا وجود ندارد.</p>}
           </div>
         </div>
       )}
@@ -2758,13 +2874,50 @@ function AdminFinance() {
 }
 
 function AdminCustomers() {
-  const { orders, darkMode, log } = useAdmin();
-  const customers = aggregateCustomers(orders);
+  const { darkMode, log, adminIdentity } = useAdmin();
+  const { addToast } = useShop();
+  const [orders, setOrders] = useState<any[]>([]);
+  const [registeredCustomers, setRegisteredCustomers] = useState<any[]>([]);
+  useEffect(() => {
+    api.customers.list().then(({ items }) => setRegisteredCustomers(items)).catch((error) => {
+      addToast('danger', `بارگذاری حساب‌های مشتریان ناموفق بود: ${error.message}`);
+    });
+    if (!adminIdentity?.sections.includes('orders')) {
+      setOrders([]);
+      return;
+    }
+    api.orders.list().then(({ items }) => setOrders(items)).catch((error) => {
+      addToast('danger', `بارگذاری سفارش‌های مشتریان ناموفق بود: ${error.message}`);
+    });
+  }, [addToast, adminIdentity]);
+  const orderCustomers = aggregateCustomers(orders);
+  const orderCustomersByMobile = new Map(orderCustomers.map((customer) => [customer.mobile, customer]));
+  const registeredPhones = new Set(registeredCustomers.map((customer) => customer.phone));
+  const customers = [
+    ...registeredCustomers.map((record) => ({
+      ...(orderCustomersByMobile.get(record.phone) || {
+        id: record.id, name: record.name, mobile: record.phone, city: '',
+        orders: record.orderCount, totalSpent: record.totalSpent,
+        segment: 'جدید', lastOrder: record.lastOrder || record.created_at,
+      }),
+      name: record.name || orderCustomersByMobile.get(record.phone)?.name,
+      loyalty: record.loyalty,
+    })),
+    ...orderCustomers.filter((customer) => !registeredPhones.has(customer.mobile)).map((customer) => ({ ...customer, loyalty: 0 })),
+  ];
   const [search, setSearch] = useState('');
   const [segmentFilter, setSegmentFilter] = useState('all');
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
-  const [notes, setNotes] = useState<Record<string, string[]>>({});
+  const [notes, setNotes] = useState<Record<string, { id: string; note: string; createdAt: string }[]>>({});
   const [newNote, setNewNote] = useState('');
+  useEffect(() => {
+    if (!selectedCustomer?.mobile) return;
+    api.customers.notes(selectedCustomer.mobile).then(({ items }) => {
+      setNotes((current) => ({ ...current, [selectedCustomer.mobile]: items }));
+    }).catch((error) => {
+      addToast('danger', `بارگذاری یادداشت‌های مشتری ناموفق بود: ${error.message}`);
+    });
+  }, [selectedCustomer?.mobile, addToast]);
 
   const filtered = customers.filter(c => {
     if (segmentFilter !== 'all' && c.segment !== segmentFilter) return false;
@@ -2789,7 +2942,7 @@ function AdminCustomers() {
       'شهر': c.city,
       'تعداد سفارش': c.orders,
       'مجموع خرید (تومان)': c.totalSpent,
-      'امتیاز وفاداری': c.loyalty,
+      'امتیاز وفاداری': c.loyalty ?? 'در دسترس نیست',
       'دسته': c.segment,
       'آخرین خرید': dayLabel(new Date(c.lastOrder))
     }));
@@ -2797,11 +2950,17 @@ function AdminCustomers() {
     log('خروجی گزارش مشتریان', 'customers');
   };
 
-  const addNote = (customerId: string) => {
+  const addNote = async (customerMobile: string) => {
     if (!newNote.trim()) return;
-    setNotes({ ...notes, [customerId]: [...(notes[customerId] || []), newNote] });
+    try {
+      const item = await api.customers.addNote(customerMobile, newNote.trim());
+      setNotes((current) => ({ ...current, [customerMobile]: [item, ...(current[customerMobile] || [])] }));
+      log('افزودن یادداشت مشتری', customerMobile);
+    } catch (error: any) {
+      addToast('danger', `ذخیره یادداشت ناموفق بود: ${error.message}`);
+      return;
+    }
     setNewNote('');
-    log('افزودن یادداشت مشتری', customerId);
   };
 
   const customerOrders = selectedCustomer ? orders.filter((o: any) => o.mobile === selectedCustomer.mobile) : [];
@@ -2878,7 +3037,7 @@ function AdminCustomers() {
                   <td className="py-2.5 px-3">{c.city}</td>
                   <td className="py-2.5 px-3 tnum">{faNum(c.orders)}</td>
                   <td className="py-2.5 px-3 tnum">{formatPrice(c.totalSpent)}</td>
-                  <td className="py-2.5 px-3 tnum">{faNum(c.loyalty)}</td>
+                  <td className="py-2.5 px-3 tnum">{c.loyalty === null ? '—' : faNum(c.loyalty)}</td>
                   <td className="py-2.5 px-3">
                     <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${c.segment === 'VIP' ? 'bg-purple-100 text-purple-700' : c.segment === 'وفادار' ? 'bg-emerald-100 text-emerald-700' : 'bg-cream-100 text-brand-700'}`}>
                       {c.segment}
@@ -2920,7 +3079,7 @@ function AdminCustomers() {
                 <div><span className="text-cream-500">شهر: </span>{selectedCustomer.city}</div>
                 <div><span className="text-cream-500">تعداد سفارش: </span><span className="tnum font-bold">{faNum(selectedCustomer.orders)}</span></div>
                 <div><span className="text-cream-500">مجموع خرید: </span><span className="tnum font-bold">{formatPrice(selectedCustomer.totalSpent)}</span></div>
-                <div><span className="text-cream-500">امتیاز وفاداری: </span><span className="tnum font-bold">{faNum(selectedCustomer.loyalty)}</span></div>
+                <div><span className="text-cream-500">امتیاز وفاداری: </span><span className="tnum font-bold">{selectedCustomer.loyalty === null ? 'در دسترس نیست' : faNum(selectedCustomer.loyalty)}</span></div>
               </div>
             </div>
 
@@ -2949,15 +3108,16 @@ function AdminCustomers() {
             <div>
               <h4 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-2`}>یادداشت‌ها</h4>
               <div className="space-y-2 mb-3 max-h-40 overflow-y-auto">
-                {(notes[selectedCustomer.id] || []).map((note, i) => (
-                  <div key={i} className={`rounded-lg border ${darkMode ? 'border-white/10 bg-[#1a212c]' : 'border-cream-200 bg-cream-50'} p-2 text-[11px]`}>
-                    {note}
+                {(notes[selectedCustomer.mobile] || []).map((item) => (
+                  <div key={item.id} className={`rounded-lg border ${darkMode ? 'border-white/10 bg-[#1a212c]' : 'border-cream-200 bg-cream-50'} p-2 text-[11px]`}>
+                    <p>{item.note}</p>
+                    <time className="block mt-1 text-[9px] text-cream-500">{dayLabel(new Date(item.createdAt))}</time>
                   </div>
                 ))}
               </div>
               <div className="flex gap-2">
                 <input value={newNote} onChange={e => setNewNote(e.target.value)} placeholder="یادداشت جدید..." className="flex-1 rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" />
-                <button onClick={() => addNote(selectedCustomer.id)} className="px-3 py-2 rounded-xl bg-brand-900 text-white text-[12px] font-bold">
+                <button onClick={() => addNote(selectedCustomer.mobile)} className="px-3 py-2 rounded-xl bg-brand-900 text-white text-[12px] font-bold">
                   <IconPlus className="w-4 h-4" />
                 </button>
               </div>
@@ -2971,7 +3131,13 @@ function AdminCustomers() {
 
 function AdminReviews() {
   const { darkMode, log } = useAdmin();
-  const { reviews, setReviews, products } = useShop();
+  const { products, addToast } = useShop();
+  const [reviews, setReviews] = useState<any[]>([]);
+  useEffect(() => {
+    api.catalog.reviews('', '').then((r: any) => setReviews(r.items || [])).catch((error) => {
+      addToast('danger', `بارگذاری دیدگاه‌ها ناموفق بود: ${error.message}`);
+    });
+  }, [addToast]);
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
   const [ratingFilter, setRatingFilter] = useState(0);
   const [search, setSearch] = useState('');
@@ -2999,22 +3165,35 @@ function AdminReviews() {
     percentage: reviews.length > 0 ? (reviews.filter(r => r.rating === star).length / reviews.length * 100) : 0
   }));
 
-  const handleApprove = (id: string) => {
-    setReviews(reviews.map(x => x.id === id ? { ...x, status: 'approved' as const } : x));
-    log('تأیید نظر', id);
+  const handleApprove = async (id: string) => {
+    try {
+      const saved = await api.catalog.updateReview(id, { status: 'approved' });
+      setReviews(reviews.map((item) => item.id === id ? saved : item));
+      log('تأیید نظر', id);
+    } catch (error: any) {
+      addToast('danger', `تأیید دیدگاه ناموفق بود: ${error.message}`);
+    }
   };
-
-  const handleReject = (id: string) => {
-    setReviews(reviews.map(x => x.id === id ? { ...x, status: 'rejected' as const } : x));
-    log('رد نظر', id, 'warning');
+  const handleReject = async (id: string) => {
+    try {
+      const saved = await api.catalog.updateReview(id, { status: 'rejected' });
+      setReviews(reviews.map((item) => item.id === id ? saved : item));
+      log('رد نظر', id, 'warning');
+    } catch (error: any) {
+      addToast('danger', `رد دیدگاه ناموفق بود: ${error.message}`);
+    }
   };
-
-  const handleReply = () => {
+  const handleReply = async () => {
     if (!reply.trim() || !selectedReview) return;
-    setReviews(reviews.map(x => x.id === selectedReview.id ? { ...x, reply } : x));
-    setSelectedReview({ ...selectedReview, reply });
-    setReply('');
-    log('پاسخ به نظر', selectedReview.id);
+    try {
+      const saved = await api.catalog.updateReview(selectedReview.id, { reply });
+      setReviews(reviews.map((item) => item.id === selectedReview.id ? saved : item));
+      setSelectedReview(saved);
+      setReply('');
+      log('پاسخ به نظر', selectedReview.id);
+    } catch (error: any) {
+      addToast('danger', `ثبت پاسخ ناموفق بود: ${error.message}`);
+    }
   };
 
   return (
@@ -3105,14 +3284,14 @@ function AdminReviews() {
               {r.pros && r.pros.length > 0 && (
                 <div className="mb-2">
                   <p className="text-[10px] font-bold text-emerald-700 mb-1">نقاط قوت:</p>
-                  <div className="flex flex-wrap gap-1">{r.pros.map((p, i) => <span key={i} className="text-[10px] bg-emerald-50 text-emerald-700 rounded-full px-2 py-0.5">{p}</span>)}</div>
+                  <div className="flex flex-wrap gap-1">{r.pros.map((p: any, i: number) => <span key={i} className="text-[10px] bg-emerald-50 text-emerald-700 rounded-full px-2 py-0.5">{p}</span>)}</div>
                 </div>
               )}
               
               {r.cons && r.cons.length > 0 && (
                 <div className="mb-3">
                   <p className="text-[10px] font-bold text-coral-700 mb-1">نقاط ضعف:</p>
-                  <div className="flex flex-wrap gap-1">{r.cons.map((c, i) => <span key={i} className="text-[10px] bg-coral-50 text-coral-700 rounded-full px-2 py-0.5">{c}</span>)}</div>
+                  <div className="flex flex-wrap gap-1">{r.cons.map((c: any, i: number) => <span key={i} className="text-[10px] bg-coral-50 text-coral-700 rounded-full px-2 py-0.5">{c}</span>)}</div>
                 </div>
               )}
 
@@ -3185,13 +3364,20 @@ function AdminReviews() {
 }
 
 function AdminDiscounts() {
-  const { discountCodes, setDiscountCodes } = useShop();
+  const [discountCodes, setDiscountCodes] = useState<any[]>([]);
+  const { setDiscountCodes: setShopDiscountCodes, addToast } = useShop();
+  useEffect(() => {
+    api.catalog.discounts()
+      .then((r: any) => { setDiscountCodes(r.items || []); setShopDiscountCodes(r.items || []); })
+      .catch((error) => addToast('danger', `بارگذاری کدهای تخفیف ناموفق بود: ${error.message}`));
+  }, [addToast, setShopDiscountCodes]);
   const { darkMode, log } = useAdmin();
   const [showForm, setShowForm] = useState(false);
   const [editingCode, setEditingCode] = useState<any>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'expired'>('all');
-  const [form, setForm] = useState({ code: '', type: 'percent', value: 10, maxUses: 100, expiresAt: '2025-12-31', active: true });
+  const freshForm = () => ({ code: '', type: 'percent', value: 10, maxUses: 100, expiresAt: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10), active: true });
+  const [form, setForm] = useState(freshForm);
 
   const stats = {
     total: discountCodes.length,
@@ -3211,18 +3397,24 @@ function AdminDiscounts() {
     return true;
   });
 
-  const save = () => {
-    if (editingCode) {
-      setDiscountCodes(discountCodes.map((x: any) => x.id === editingCode.id ? { ...editingCode, ...form } : x));
-      log(`ویرایش کد تخفیف ${form.code}`, editingCode.id);
-    } else {
-      const newCode = { ...form, id: `dc-${Date.now()}`, usedCount: 0 };
-      setDiscountCodes([...discountCodes, newCode]);
-      log(`ایجاد کد تخفیف ${form.code}`, newCode.id);
+  const save = async () => {
+    try {
+      const saved = editingCode
+        ? await api.catalog.updateDiscount(editingCode.id, { ...editingCode, ...form })
+        : await api.catalog.createDiscount({ ...form, code: form.code.trim().toUpperCase() });
+      const next = editingCode
+        ? discountCodes.map((item: any) => item.id === saved.id ? saved : item)
+        : [...discountCodes, saved];
+      setDiscountCodes(next);
+      setShopDiscountCodes(next);
+      log(`${editingCode ? 'ویرایش' : 'ایجاد'} کد تخفیف ${saved.code}`, saved.id);
+      addToast('success', 'کد تخفیف ذخیره شد');
+      setShowForm(false);
+      setEditingCode(null);
+      setForm(freshForm());
+    } catch (error: any) {
+      addToast('danger', `ذخیره کد تخفیف ناموفق بود: ${error.message}`);
     }
-    setShowForm(false);
-    setEditingCode(null);
-    setForm({ code: '', type: 'percent', value: 10, maxUses: 100, expiresAt: '2025-12-31', active: true });
   };
 
   const handleEdit = (code: any) => {
@@ -3231,10 +3423,17 @@ function AdminDiscounts() {
     setShowForm(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('آیا از حذف این کد تخفیف مطمئن هستید؟')) {
-      setDiscountCodes(discountCodes.filter((c: any) => c.id !== id));
-      log('حذف کد تخفیف', id, 'warning');
+      try {
+        await api.catalog.deleteDiscount(id);
+        const next = discountCodes.filter((item: any) => item.id !== id);
+        setDiscountCodes(next);
+        setShopDiscountCodes(next);
+        log('حذف کد تخفیف', id, 'warning');
+      } catch (error: any) {
+        addToast('danger', `حذف کد تخفیف ناموفق بود: ${error.message}`);
+      }
     }
   };
 
@@ -3261,7 +3460,7 @@ function AdminDiscounts() {
 
       {/* Actions */}
       <div className="flex flex-wrap gap-2">
-        <button onClick={() => { setEditingCode(null); setForm({ code: '', type: 'percent', value: 10, maxUses: 100, expiresAt: '2025-12-31', active: true }); setShowForm(true); }} className="bg-brand-900 text-white px-4 py-2.5 rounded-xl text-[12px] font-bold flex items-center gap-1 shadow-lg shadow-brand-900/25"><IconPlus className="w-4 h-4" />ایجاد کد تخفیف جدید</button>
+        <button onClick={() => { setEditingCode(null); setForm(freshForm()); setShowForm(true); }} className="bg-brand-900 text-white px-4 py-2.5 rounded-xl text-[12px] font-bold flex items-center gap-1 shadow-lg shadow-brand-900/25"><IconPlus className="w-4 h-4" />ایجاد کد تخفیف جدید</button>
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="جستجو کد تخفیف..." className="flex-1 min-w-[200px] rounded-xl border border-cream-300 bg-white px-3 py-2 text-[12px] outline-none" />
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as any)} className="rounded-xl border border-cream-300 bg-white px-3 py-2 text-[12px] outline-none">
           <option value="all">همه وضعیت‌ها</option>
@@ -3315,7 +3514,18 @@ function AdminDiscounts() {
                       <span className={isExpired ? 'text-coral-600 font-bold' : ''}>{c.expiresAt}</span>
                     </td>
                     <td className="py-2.5 px-3">
-                      <button onClick={() => { setDiscountCodes(discountCodes.map((x: any) => x.id === c.id ? { ...x, active: !x.active } : x)); log(`${c.active ? 'غیرفعال' : 'فعال'} کردن کد ${c.code}`, c.id); }} className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${c.active && !isExpired ? 'bg-emerald-100 text-emerald-700' : 'bg-cream-100 text-cream-500'}`}>
+                      <button onClick={async () => {
+                        const updated = { ...c, active: !c.active };
+                        try {
+                          const saved = await api.catalog.updateDiscount(c.id, updated);
+                          const next = discountCodes.map((item: any) => item.id === c.id ? saved : item);
+                          setDiscountCodes(next);
+                          setShopDiscountCodes(next);
+                          log(`${saved.active ? 'فعال' : 'غیرفعال'} کردن کد ${c.code}`, c.id);
+                        } catch (error: any) {
+                          addToast('danger', `تغییر وضعیت کد تخفیف ناموفق بود: ${error.message}`);
+                        }
+                      }} className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${c.active && !isExpired ? 'bg-emerald-100 text-emerald-700' : 'bg-cream-100 text-cream-500'}`}>
                         {isExpired ? 'منقضی' : c.active ? 'فعال' : 'غیرفعال'}
                       </button>
                     </td>
@@ -3382,25 +3592,26 @@ function AdminDiscounts() {
 
 /* Remaining admin sections - simplified but functional */
 function AdminGrowth() {
-  const { campaigns, setCampaigns, automations, setAutomations, loyalty, setLoyalty, darkMode, log, orders } = useAdmin();
-  const { discountCodes, setDiscountCodes } = useShop();
+  const { campaigns, automations, loyalty, setLoyalty, darkMode, log } = useAdmin();
+  const { discountCodes, setDiscountCodes, addToast } = useShop();
   const [tab, setTab] = useState<'campaigns' | 'codes' | 'automation' | 'loyalty' | 'ab'>('campaigns');
   const [showCodeForm, setShowCodeForm] = useState(false);
   const [newCode, setNewCode] = useState({ code: '', type: 'percent', value: 10, maxUses: 100, expiresAt: '' });
-
-  const totalCampaignUses = campaigns.reduce((s: number, c: any) => s + c.uses, 0);
-  const activeCampaigns = campaigns.filter((c: any) => c.active).length;
-  const totalAutomationSent = automations.reduce((s: number, a: any) => s + a.sent, 0);
+  useEffect(() => {
+    api.catalog.discounts().then((result: any) => setDiscountCodes(result.items || [])).catch((error) => {
+      addToast('danger', `بارگذاری کدهای تخفیف ناموفق بود: ${error.message}`);
+    });
+  }, [addToast, setDiscountCodes]);
 
   return (
     <div className="space-y-4">
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
-          { l: 'کمپین‌های فعال', v: faNum(activeCampaigns), c: 'bg-emerald-50 text-emerald-700', icon: <IconRocket className="w-5 h-5" /> },
-          { l: 'کل استفاده کمپین', v: faNum(totalCampaignUses), c: 'bg-blue-50 text-blue-700', icon: <IconTrending className="w-5 h-5" /> },
+          { l: 'کمپین خودکار فعال', v: faNum(0), c: 'bg-cream-100 text-cream-700', icon: <IconRocket className="w-5 h-5" /> },
+          { l: 'تعریف کمپین', v: faNum(campaigns.length), c: 'bg-blue-50 text-blue-700', icon: <IconTrending className="w-5 h-5" /> },
           { l: 'کدهای تخفیف', v: faNum(discountCodes.length), c: 'bg-purple-50 text-purple-700', icon: <IconTag className="w-5 h-5" /> },
-          { l: 'پیام‌های ارسالی', v: faNum(totalAutomationSent), c: 'bg-amber-50 text-amber-700', icon: <IconSend className="w-5 h-5" /> },
+          { l: 'اتوماسیون‌های تعریف‌شده', v: faNum(automations.length), c: 'bg-amber-50 text-amber-700', icon: <IconSend className="w-5 h-5" /> },
         ].map((k, i) => (
           <div key={i} className={`rounded-xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-4`}>
             <div className="flex items-center justify-between mb-2">
@@ -3422,6 +3633,7 @@ function AdminGrowth() {
       {/* Campaigns Tab */}
       {tab === 'campaigns' && (
         <div className="space-y-3">
+          <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] leading-5 text-amber-800">طبق سیاست فعلی فروشگاه، کمپین‌های خودکار در checkout غیرفعال‌اند؛ فقط کد تخفیفی که در checkout اعتبارسنجی شده باشد روی قیمت اعمال می‌شود.</p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             {campaigns.map((c: any) => (
               <div key={c.id} className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5 hover:shadow-lg transition-all`}>
@@ -3429,17 +3641,11 @@ function AdminGrowth() {
                   <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${c.type === 'tiered' ? 'bg-purple-100 text-purple-700' : c.type === 'bogo' ? 'bg-pink-100 text-pink-700' : 'bg-blue-100 text-blue-700'}`}>
                     {c.type === 'tiered' ? 'پلکانی' : c.type === 'bogo' ? 'یکی بخر یکی ببر' : 'ارسال رایگان'}
                   </span>
-                  <button onClick={() => { setCampaigns(campaigns.map((x: any) => x.id === c.id ? { ...x, active: !x.active } : x)); log(`تغییر وضعیت کمپین ${c.name}`, c.id); }} className={`w-10 h-5 rounded-full relative transition-colors ${c.active ? 'bg-emerald-500' : 'bg-cream-300'}`}>
-                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${c.active ? 'right-0.5' : 'right-5'}`}></span>
-                  </button>
+                  <span className="rounded-full bg-cream-100 px-2.5 py-1 text-[10px] font-bold text-cream-500">غیرفعال در checkout</span>
                 </div>
                 <h4 className={`text-[13px] font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-2`}>{c.name}</h4>
                 <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-cream-500">استفاده: <span className="tnum font-bold text-brand-900">{faNum(c.uses)}</span></span>
-                  {c.config?.tiers && <span className="text-cream-500">تا {faNum(c.config.tiers[c.config.tiers.length - 1]?.discount || 0)}٪ تخفیف</span>}
-                </div>
-                <div className="mt-3 h-1.5 bg-cream-200 rounded-full overflow-hidden">
-                  <div className="h-full bg-brand-900 rounded-full" style={{ width: `${Math.min(100, c.uses * 2)}%` }}></div>
+                  <span className="text-cream-500">اعمال خودکار: خاموش</span>
                 </div>
               </div>
             ))}
@@ -3490,7 +3696,18 @@ function AdminGrowth() {
                   <input type="number" value={newCode.maxUses} onChange={e => setNewCode({ ...newCode, maxUses: +e.target.value })} placeholder="سقف استفاده" className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" />
                   <input type="date" value={newCode.expiresAt} onChange={e => setNewCode({ ...newCode, expiresAt: e.target.value })} className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" />
                 </div>
-                <button onClick={() => { setDiscountCodes([...discountCodes, { ...newCode, id: `dc-${Date.now()}`, usedCount: 0, active: true }]); setShowCodeForm(false); setNewCode({ code: '', type: 'percent', value: 10, maxUses: 100, expiresAt: '' }); log('ایجاد کد تخفیف', newCode.code); }} className="w-full mt-4 bg-brand-900 text-white py-2.5 rounded-xl font-bold text-[12px]">ذخیره</button>
+                <button onClick={async () => {
+                  try {
+                    const saved = await api.catalog.createDiscount({ ...newCode, code: newCode.code.trim().toUpperCase(), active: true });
+                    setDiscountCodes([...discountCodes, saved]);
+                    setShowCodeForm(false);
+                    setNewCode({ code: '', type: 'percent', value: 10, maxUses: 100, expiresAt: '' });
+                    log('ایجاد کد تخفیف', saved.code);
+                    addToast('success', 'کد تخفیف ذخیره شد');
+                  } catch (error: any) {
+                    addToast('danger', `ایجاد کد تخفیف ناموفق بود: ${error.message}`);
+                  }
+                }} className="w-full mt-4 bg-brand-900 text-white py-2.5 rounded-xl font-bold text-[12px]">ذخیره</button>
               </div>
             </div>
           )}
@@ -3500,6 +3717,7 @@ function AdminGrowth() {
       {/* Automation Tab */}
       {tab === 'automation' && (
         <div className="space-y-3">
+          <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] leading-5 text-amber-800">ارسال پیام خودکار طبق سیاست فعلی خاموش است؛ هیچ رویدادی پیامک ارسال نمی‌کند و فعال‌سازی تا تعیین رضایت مشتری و provider مجاز نیست.</p>
           {automations.map((a: any) => (
             <div key={a.id} className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5 hover:shadow-md transition-all`}>
               <div className="flex items-center justify-between mb-3">
@@ -3512,14 +3730,11 @@ function AdminGrowth() {
                     <p className="text-[10px] text-cream-500">رویداد: {a.event} | کانال: {a.channel}</p>
                   </div>
                 </div>
-                <button onClick={() => { setAutomations(automations.map((x: any) => x.id === a.id ? { ...x, active: !x.active } : x)); }} className={`w-10 h-5 rounded-full relative transition-colors ${a.active ? 'bg-emerald-500' : 'bg-cream-300'}`}>
-                  <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${a.active ? 'right-0.5' : 'right-5'}`}></span>
-                </button>
+                <span className="rounded-full bg-cream-100 px-2.5 py-1 text-[10px] font-bold text-cream-500">خاموش؛ بدون ارسال</span>
               </div>
               <div className={`rounded-lg ${darkMode ? 'bg-[#1a212c]' : 'bg-cream-50'} p-3 text-[11px] text-brand-700 mb-2`}>{a.template}</div>
               <div className="flex items-center justify-between text-[11px]">
-                <span className="text-cream-500">ارسال شده: <span className="tnum font-bold text-brand-900">{faNum(a.sent)}</span></span>
-                <button onClick={() => { setAutomations(automations.map((x: any) => x.id === a.id ? { ...x, sent: x.sent + 1 } : x)); }} className="text-brand-600 font-bold text-[10px] hover:text-brand-900">تست ارسال</button>
+                <span className="text-cream-500">ارسال واقعی: {faNum(0)}</span>
               </div>
             </div>
           ))}
@@ -3529,35 +3744,36 @@ function AdminGrowth() {
       {/* Loyalty Tab */}
       {tab === 'loyalty' && (
         <div className="space-y-4">
-          <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
+          {loyalty ? <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
             <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-4`}>تنظیمات امتیازدهی</h3>
-            <div className="grid grid-cols-2 gap-4">
+            <p className="mb-4 rounded-lg bg-emerald-50 p-3 text-[11px] leading-5 text-emerald-800">امتیاز پس از تأیید پرداخت ثبت می‌شود. بازخرید در checkout تا سقف درصد مبلغ کالای پس از تخفیف اعمال می‌شود؛ مالیات و ارسال مشمول امتیاز نیستند.</p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="text-[11px] font-bold text-cream-500 mb-1 block">امتیاز به ازای هر ۱۰۰۰ تومان</label>
-                <input type="number" value={loyalty.pointsPerThousand} onChange={e => setLoyalty({ ...loyalty, pointsPerThousand: +e.target.value })} className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" />
+                <input type="number" min="0" step="1" value={loyalty.pointsPerThousand} onChange={e => setLoyalty({ ...loyalty, pointsPerThousand: +e.target.value })} className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" />
               </div>
               <div>
                 <label className="text-[11px] font-bold text-cream-500 mb-1 block">ارزش هر امتیاز (تومان)</label>
-                <input type="number" value={loyalty.pointValue} onChange={e => setLoyalty({ ...loyalty, pointValue: +e.target.value })} className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" />
+                <input type="number" min="0" step="1" value={loyalty.pointValue} onChange={e => setLoyalty({ ...loyalty, pointValue: +e.target.value })} className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" />
+              </div>
+              <div>
+                <label className="text-[11px] font-bold text-cream-500 mb-1 block">سقف بازخرید از مبلغ کالا (٪)</label>
+                <input type="number" min="0" max="100" step="1" value={loyalty.redemptionCapPercent ?? 10} onChange={e => setLoyalty({ ...loyalty, redemptionCapPercent: +e.target.value })} className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" />
               </div>
             </div>
-          </div>
+          </div> : <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-800">تنظیمات وفاداری در دسترس نیست یا هنوز بارگذاری نشده است.</p>}
           <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
-            <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-4`}>برترین اعضای باشگاه</h3>
-            <div className="space-y-3">
-              {loyalty.members.map((m: any, i: number) => (
-                <div key={m.id} className={`flex items-center justify-between p-3 rounded-xl ${darkMode ? 'bg-[#1a212c]' : 'bg-cream-50'}`}>
-                  <div className="flex items-center gap-3">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold ${i === 0 ? 'bg-amber-500' : i === 1 ? 'bg-gray-400' : 'bg-amber-700'}`}>{faNum(i + 1)}</div>
-                    <div>
-                      <p className="text-[12px] font-bold">{m.name}</p>
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${m.tier === 'platinum' ? 'bg-purple-100 text-purple-700' : m.tier === 'gold' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-700'}`}>{m.tier === 'platinum' ? 'پلاتینیوم' : m.tier === 'gold' ? 'طلایی' : 'نقره‌ای'}</span>
-                    </div>
+            <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-2`}>اعضای باشگاه</h3>
+            {loyalty?.members?.length ? (
+              <div className="space-y-2">
+                {loyalty.members.map((member: any) => (
+                  <div key={member.id} className={`flex items-center justify-between rounded-xl p-3 ${darkMode ? 'bg-[#1a212c]' : 'bg-cream-50'}`}>
+                    <div><p className="text-[12px] font-bold">{member.name || 'بدون نام'}</p><p className="text-[10px] text-cream-500">{member.phone}</p></div>
+                    <span className="text-[12px] font-bold tnum">{faNum(member.points)} امتیاز</span>
                   </div>
-                  <span className="tnum text-[13px] font-extrabold text-brand-900">{faNum(m.points)} امتیاز</span>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : <p className="text-[11px] text-cream-500">هنوز امتیاز وفاداری برای حساب مشتریان ثبت نشده است.</p>}
           </div>
         </div>
       )}
@@ -3565,30 +3781,8 @@ function AdminGrowth() {
       {/* A/B Test Tab */}
       {tab === 'ab' && (
         <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
-          <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-4`}>مقایسه سناریوهای تخفیف</h3>
-          <div className="grid grid-cols-2 gap-4">
-            <div className={`rounded-xl border-2 border-dashed ${darkMode ? 'border-white/20' : 'border-brand-200'} p-4`}>
-              <h4 className="text-[12px] font-bold text-brand-900 mb-3">سناریو A: تخفیف ۱۰٪</h4>
-              <div className="space-y-2 text-[11px]">
-                <div className="flex justify-between"><span className="text-cream-500">نرخ تبدیل:</span><span className="tnum font-bold">۴.۲٪</span></div>
-                <div className="flex justify-between"><span className="text-cream-500">بازدید:</span><span className="tnum font-bold">{faNum(1250)}</span></div>
-                <div className="flex justify-between"><span className="text-cream-500">خرید:</span><span className="tnum font-bold">{faNum(52)}</span></div>
-                <div className="flex justify-between"><span className="text-cream-500">درآمد:</span><span className="tnum font-bold">{formatPrice(3200000)}</span></div>
-              </div>
-            </div>
-            <div className={`rounded-xl border-2 border-dashed ${darkMode ? 'border-white/20' : 'border-emerald-200'} p-4 bg-emerald-50/30`}>
-              <h4 className="text-[12px] font-bold text-brand-900 mb-3">سناریو B: تخفیف ۱۵٪</h4>
-              <div className="space-y-2 text-[11px]">
-                <div className="flex justify-between"><span className="text-cream-500">نرخ تبدیل:</span><span className="tnum font-bold text-emerald-700">۵.۸٪</span></div>
-                <div className="flex justify-between"><span className="text-cream-500">بازدید:</span><span className="tnum font-bold">{faNum(1250)}</span></div>
-                <div className="flex justify-between"><span className="text-cream-500">خرید:</span><span className="tnum font-bold text-emerald-700">{faNum(72)}</span></div>
-                <div className="flex justify-between"><span className="text-cream-500">درآمد:</span><span className="tnum font-bold text-emerald-700">{formatPrice(3850000)}</span></div>
-              </div>
-              <div className="mt-3 pt-3 border-t border-emerald-200">
-                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-1 rounded-full">برنده: سناریو B</span>
-              </div>
-            </div>
-          </div>
+          <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-2`}>آزمایش A/B</h3>
+          <p className="text-[11px] leading-5 text-cream-500">تا زمان پیاده‌سازی تخصیص تصادفی کاربران و ثبت رخدادهای بازدید و خرید، دادهٔ آزمایش و نتیجهٔ برنده‌ای برای نمایش وجود ندارد.</p>
         </div>
       )}
     </div>
@@ -3596,17 +3790,118 @@ function AdminGrowth() {
 }
 
 function AdminReturns() {
-  const { rmas, setRmas, darkMode, log } = useAdmin();
+  const { rmas, setRmas, orders, darkMode, log } = useAdmin();
+  const { addToast } = useShop();
   const [filter, setFilter] = useState('all');
+  const [showCreate, setShowCreate] = useState(false);
+  const [orderId, setOrderId] = useState('');
+  const [productId, setProductId] = useState('');
+  const [quantity, setQuantity] = useState(1);
+  const [reason, setReason] = useState('');
   const statusFlow = ['requested', 'approved', 'quality_check', 'returned', 'refunded'];
-  const statusLabels: Record<string, string> = { requested: 'درخواست', approved: 'تأیید شده', quality_check: 'بررسی کیفیت', returned: 'بازگشت به انبار', refunded: 'بازگشت وجه', rejected: 'رد شده' };
+  const statusLabels: Record<string, string> = { requested: 'درخواست', approved: 'تأیید شده', quality_check: 'بررسی کیفیت', returned: 'تحویل کالا (بدون تغییر موجودی)', refunded: 'بازگشت وجه', rejected: 'رد شده' };
   const statusColors: Record<string, string> = { requested: 'bg-amber-100 text-amber-700', approved: 'bg-blue-100 text-blue-700', quality_check: 'bg-purple-100 text-purple-700', returned: 'bg-indigo-100 text-indigo-700', refunded: 'bg-emerald-100 text-emerald-700', rejected: 'bg-coral-100 text-coral-700' };
 
+  const paidOrders = orders.filter(isPaidOrder);
+  const selectedOrder = paidOrders.find((order: any) => order.id === orderId);
+  const selectedItems = selectedOrder?.items || [];
+  const selectedLine = selectedItems.find((item: any) => item.productId === productId);
+  const openCreate = () => {
+    setOrderId(paidOrders[0]?.id || '');
+    setProductId(paidOrders[0]?.items?.[0]?.productId || '');
+    setQuantity(1);
+    setReason('');
+    setShowCreate(true);
+  };
+  const createRma = () => {
+    if (!selectedOrder || !selectedLine || !reason.trim() || !Number.isSafeInteger(quantity) || quantity < 1) {
+      addToast('danger', 'سفارش، کالا، تعداد و دلیل مرجوعی را کامل کنید');
+      return;
+    }
+    const rma = {
+      id: `rma-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      orderId: selectedOrder.id,
+      orderCode: selectedOrder.code,
+      productId,
+      productName: selectedLine.name,
+      quantity,
+      customer: selectedOrder.customer,
+      mobile: selectedOrder.mobile,
+      reason: reason.trim(),
+      status: 'requested',
+      date: new Date().toISOString(),
+    };
+    setRmas([rma, ...rmas]);
+    log(`ثبت درخواست مرجوعی ${rma.id}`, rma.id);
+    setShowCreate(false);
+  };
+  const advanceRma = (rma: any) => {
+    if (rma.status === 'returned') {
+      const amountText = window.prompt('مبلغ بازپرداخت واقعی به تومان را وارد کنید');
+      if (amountText === null) return;
+      const refundAmount = Number(amountText.replace(/[,\s]/g, ''));
+      if (!Number.isSafeInteger(refundAmount) || refundAmount <= 0) {
+        addToast('danger', 'مبلغ باید عدد صحیح و بیشتر از صفر باشد');
+        return;
+      }
+      const refundReference = window.prompt('مرجع واقعی حواله انجام‌شده را وارد کنید');
+      if (refundReference === null) return;
+      if (!refundReference.trim()) {
+        addToast('danger', 'ثبت بازپرداخت بدون مرجع حواله ممکن نیست');
+        return;
+      }
+      setRmas(rmas.map((item: any) => item.id === rma.id
+        ? { ...item, status: 'refunded', refundAmount, refundReference: refundReference.trim() }
+        : item));
+      log(`ثبت بازپرداخت مرجوعی ${rma.id}`, rma.id);
+      return;
+    }
+    const nextStatus = statusFlow[statusFlow.indexOf(rma.status) + 1];
+    if (!nextStatus) return;
+    setRmas(rmas.map((item: any) => item.id === rma.id ? { ...item, status: nextStatus } : item));
+    log(`پیشبرد مرجوعی ${rma.id}`, rma.id);
+  };
   const filtered = rmas.filter((r: any) => filter === 'all' || r.status === filter);
   const reasonStats = rmas.reduce((acc: Record<string, number>, r: any) => { acc[r.reason] = (acc[r.reason] || 0) + 1; return acc; }, {});
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-[11px] text-cream-500">ثبت بازپرداخت نیازمند مبلغ و مرجع حواله واقعی است؛ اصلاح موجودی انبار باید جداگانه انجام شود.</p>
+        <button onClick={openCreate} disabled={!paidOrders.length} className="rounded-xl bg-brand-900 px-4 py-2 text-[11px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">ثبت مرجوعی جدید</button>
+      </div>
+      {showCreate && (
+        <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
+          <h3 className="mb-3 text-sm font-bold">درخواست مرجوعی برای سفارش پرداخت‌شده</h3>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="space-y-1 text-[11px]">سفارش
+              <select value={orderId} onChange={(event) => {
+                const nextOrder = paidOrders.find((order: any) => order.id === event.target.value);
+                setOrderId(event.target.value);
+                setProductId(nextOrder?.items?.[0]?.productId || '');
+                setQuantity(1);
+              }} className="w-full rounded-lg border border-cream-300 bg-transparent p-2">
+                {paidOrders.map((order: any) => <option key={order.id} value={order.id}>{order.code} — {order.customer}</option>)}
+              </select>
+            </label>
+            <label className="space-y-1 text-[11px]">کالا
+              <select value={productId} onChange={(event) => { setProductId(event.target.value); setQuantity(1); }} className="w-full rounded-lg border border-cream-300 bg-transparent p-2">
+                {selectedItems.map((item: any) => <option key={item.productId} value={item.productId}>{item.name} (حداکثر {item.qty})</option>)}
+              </select>
+            </label>
+            <label className="space-y-1 text-[11px]">تعداد
+              <input type="number" min={1} max={selectedLine?.qty || 1} value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} className="w-full rounded-lg border border-cream-300 bg-transparent p-2" />
+            </label>
+            <label className="space-y-1 text-[11px]">دلیل مرجوعی
+              <input value={reason} onChange={(event) => setReason(event.target.value)} maxLength={1000} className="w-full rounded-lg border border-cream-300 bg-transparent p-2" />
+            </label>
+          </div>
+          <div className="mt-4 flex justify-end gap-2">
+            <button onClick={() => setShowCreate(false)} className="rounded-lg px-3 py-2 text-[11px]">انصراف</button>
+            <button onClick={createRma} className="rounded-lg bg-brand-900 px-4 py-2 text-[11px] font-bold text-white">ثبت درخواست</button>
+          </div>
+        </div>
+      )}
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
@@ -3674,13 +3969,15 @@ function AdminReturns() {
             </div>
 
             <div className={`rounded-lg ${darkMode ? 'bg-[#1a212c]' : 'bg-cream-50'} p-3 mb-3`}>
+              {r.orderCode && <p className="mb-1 text-[11px]"><span className="text-cream-500">سفارش: </span><span className="font-bold">{r.orderCode}</span></p>}
               <p className="text-[11px]"><span className="text-cream-500">دلیل: </span><span className="font-bold">{r.reason}</span></p>
+              {r.status === 'refunded' && <p className="mt-1 text-[11px]"><span className="text-cream-500">بازپرداخت ثبت‌شده: </span><span className="font-bold">{faNum(r.refundAmount)} ریال · مرجع {r.refundReference}</span></p>}
             </div>
 
             {r.status !== 'refunded' && r.status !== 'rejected' && (
               <div className="flex gap-2">
-                <button onClick={() => { const idx = statusFlow.indexOf(r.status); const next = idx < statusFlow.length - 1 ? statusFlow[idx + 1] : 'refunded'; setRmas(rmas.map((x: any) => x.id === r.id ? { ...x, status: next } : x)); log(`پیشبرد مرجوعی ${r.id}`, r.id); }} className="flex-1 bg-brand-900 text-white py-2 rounded-xl text-[11px] font-bold">مرحله بعدی</button>
-                <button onClick={() => { setRmas(rmas.map((x: any) => x.id === r.id ? { ...x, status: 'rejected' } : x)); log(`رد مرجوعی ${r.id}`, r.id, 'warning'); }} className="px-4 py-2 rounded-xl bg-coral-100 text-coral-700 text-[11px] font-bold">رد درخواست</button>
+                <button onClick={() => advanceRma(r)} className="flex-1 bg-brand-900 text-white py-2 rounded-xl text-[11px] font-bold">{r.status === 'returned' ? 'ثبت بازپرداخت واقعی' : 'مرحله بعدی'}</button>
+                {['requested', 'approved', 'quality_check'].includes(r.status) && <button onClick={() => { setRmas(rmas.map((x: any) => x.id === r.id ? { ...x, status: 'rejected' } : x)); log(`رد مرجوعی ${r.id}`, r.id, 'warning'); }} className="px-4 py-2 rounded-xl bg-coral-100 text-coral-700 text-[11px] font-bold">رد درخواست</button>}
               </div>
             )}
           </div>
@@ -3978,11 +4275,61 @@ function AdminOperations() {
 }
 
 function AdminSystem() {
-  const { roles, setRoles, audit, loginHistory, errorLog, setErrorLog, integrations, setIntegrations, darkMode, log, setIsAdmin } = useAdmin();
-  const [tab, setTab] = useState<'roles' | 'audit' | 'security' | 'integrations' | 'backup'>('roles');
+  const { roles, audit, loginHistory, errorLog, setErrorLog, integrations, darkMode, log, setIsAdmin, adminIdentity } = useAdmin();
+  const [tab, setTab] = useState<'roles' | 'users' | 'audit' | 'security' | 'integrations' | 'backup'>('roles');
   const [auditFilter, setAuditFilter] = useState<'all' | 'normal' | 'warning' | 'critical'>('all');
   const [search, setSearch] = useState('');
   const backupRef = useRef<HTMLInputElement>(null);
+  const [adminUsers, setAdminUsers] = useState<any[]>([]);
+  const [userForm, setUserForm] = useState({ id: '', username: '', name: '', roleId: '', password: '' });
+  const [userError, setUserError] = useState('');
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [backupBusy, setBackupBusy] = useState(false);
+  const [backupError, setBackupError] = useState('');
+
+  const loadAdminUsers = () => {
+    setUsersLoading(true);
+    api.admin.users.list().then(({ items }) => setAdminUsers(items)).catch((error) => {
+      setUserError(error instanceof Error ? error.message : 'بارگذاری حساب‌های مدیر ناموفق بود');
+    }).finally(() => setUsersLoading(false));
+  };
+
+  useEffect(() => {
+    if (tab === 'users') loadAdminUsers();
+  }, [tab]);
+
+  const saveAdminUser = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setUserError('');
+    try {
+      const ownRoleChanged = userForm.id === adminIdentity?.id && userForm.roleId !== adminIdentity.roleId;
+      if (userForm.id) {
+        const { id, password, ...fields } = userForm;
+        await api.admin.users.update(id, { ...fields, ...(password ? { password } : {}) });
+      } else {
+        await api.admin.users.create(userForm);
+      }
+      if (ownRoleChanged) {
+        window.location.reload();
+        return;
+      }
+      setUserForm({ id: '', username: '', name: '', roleId: '', password: '' });
+      loadAdminUsers();
+    } catch (error) {
+      setUserError(error instanceof Error ? error.message : 'ذخیره حساب مدیر ناموفق بود');
+    }
+  };
+
+  const deleteAdminUser = async (id: string) => {
+    if (!window.confirm('حساب مدیر حذف شود؟ این عملیات قابل بازگشت نیست.')) return;
+    setUserError('');
+    try {
+      await api.admin.users.delete(id);
+      loadAdminUsers();
+    } catch (error) {
+      setUserError(error instanceof Error ? error.message : 'حذف حساب مدیر ناموفق بود');
+    }
+  };
 
   const stats = {
     totalAudit: audit.length,
@@ -3990,7 +4337,7 @@ function AdminSystem() {
     criticals: audit.filter((a: any) => a.severity === 'critical').length,
     failedLogins: loginHistory.filter((l: any) => !l.success).length,
     activeErrors: errorLog.filter((e: any) => !e.resolved).length,
-    connectedIntegrations: integrations.filter((i: any) => i.connected).length,
+    configuredIntegrations: integrations.length,
   };
 
   const filteredAudit = audit.filter((a: any) => {
@@ -3999,30 +4346,45 @@ function AdminSystem() {
     return true;
   });
 
-  const exportBackup = () => {
-    const data: Record<string, any> = {};
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith('tasis-')) { try { data[key] = JSON.parse(localStorage.getItem(key) || ''); } catch { data[key] = localStorage.getItem(key); } }
+  const exportBackup = async () => {
+    setBackupBusy(true);
+    setBackupError('');
+    try {
+      const data = await api.admin.backup.export();
+      downloadFile(JSON.stringify(data, null, 2), `tasis-database-backup-${new Date().toISOString().slice(0, 10)}.json`, 'application/json');
+      log('خروجی پشتیبان پایگاه‌داده', 'system');
+    } catch (error) {
+      setBackupError(error instanceof Error ? error.message : 'تهیه فایل پشتیبان ناموفق بود');
+    } finally {
+      setBackupBusy(false);
     }
-    downloadFile(JSON.stringify(data, null, 2), `tasis-backup-${new Date().toISOString().slice(0, 10)}.json`, 'application/json');
-    log('خروجی پشتیبان', 'system');
   };
 
-  const importBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const importBackup = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      try {
-        const data = JSON.parse(ev.target?.result as string);
-        Object.entries(data).forEach(([key, val]) => { localStorage.setItem(key, JSON.stringify(val)); });
-        log('بازیابی پشتیبان', 'system');
-        alert('بازیابی با موفقیت انجام شد. صفحه بارگذاری مجدد می‌شود.');
-        window.location.reload();
-      } catch { alert('فایل پشتیبان نامعتبر است'); }
-    };
-    reader.readAsText(file);
+    if (file.size > 25 * 1024 * 1024) {
+      alert('فایل پشتیبان بیش از حد بزرگ است');
+      e.target.value = '';
+      return;
+    }
+    if (!window.confirm('بازیابی، تمام داده‌های عملیاتی پایگاه‌داده فعلی را جایگزین می‌کند. حساب مدیر جاری حفظ می‌شود. فایل شامل اطلاعات مشتری و hash رمزها است و باید محرمانه نگهداری شود. ادامه می‌دهید؟')) {
+      e.target.value = '';
+      return;
+    }
+    setBackupBusy(true);
+    setBackupError('');
+    try {
+      const data = JSON.parse(await file.text());
+      await api.admin.backup.restore(data);
+      alert('بازیابی پایگاه‌داده انجام شد. صفحه دوباره بارگذاری می‌شود.');
+      window.location.reload();
+    } catch (error) {
+      setBackupError(error instanceof Error ? error.message : 'بازیابی فایل پشتیبان ناموفق بود');
+    } finally {
+      setBackupBusy(false);
+      e.target.value = '';
+    }
   };
 
   const clearErrors = () => {
@@ -4040,7 +4402,7 @@ function AdminSystem() {
           { l: 'بحرانی', v: faNum(stats.criticals), c: 'bg-coral-50 text-coral-700', icon: <IconAlert className="w-5 h-5" /> },
           { l: 'ورود ناموفق', v: faNum(stats.failedLogins), c: 'bg-purple-50 text-purple-700', icon: <IconLock className="w-5 h-5" /> },
           { l: 'خطاهای فعال', v: faNum(stats.activeErrors), c: 'bg-coral-50 text-coral-700', icon: <IconAlert className="w-5 h-5" /> },
-          { l: 'یکپارچگی‌ها', v: faNum(stats.connectedIntegrations), c: 'bg-emerald-50 text-emerald-700', icon: <IconLink className="w-5 h-5" /> },
+          { l: 'یکپارچگی‌های تعریف‌شده', v: faNum(stats.configuredIntegrations), c: 'bg-emerald-50 text-emerald-700', icon: <IconLink className="w-5 h-5" /> },
         ].map((k, i) => (
           <div key={i} className={`rounded-xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-4`}>
             <div className="flex items-center justify-between mb-2">
@@ -4056,6 +4418,7 @@ function AdminSystem() {
       <div className="flex flex-wrap gap-2 border-b border-cream-300">
         {[
           { k: 'roles', l: 'نقش‌ها و دسترسی‌ها', icon: <IconUsers className="w-4 h-4" /> },
+          { k: 'users', l: 'حساب‌های مدیر', icon: <IconUser className="w-4 h-4" /> },
           { k: 'audit', l: 'لاگ رویدادها', icon: <IconClipboard className="w-4 h-4" /> },
           { k: 'security', l: 'امنیت و ورودها', icon: <IconShield className="w-4 h-4" /> },
           { k: 'integrations', l: 'یکپارچگی‌ها', icon: <IconLink className="w-4 h-4" /> },
@@ -4070,10 +4433,11 @@ function AdminSystem() {
       {/* Roles Tab */}
       {tab === 'roles' && (
         <div className="space-y-4">
+          <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-[11px] leading-5 text-emerald-800">دسترسی حساب‌ها براساس نقش اختصاص‌یافته در سرور اعمال می‌شود. دسترسی مؤثر پس از تغییر نقش در درخواست بعدی به‌روزرسانی خواهد شد.</p>
           <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
             <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-4`}>نقش‌های سیستمی</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {roles.map((r: any) => (
+            {roles.map((r: any) => (
                 <div key={r.id} className={`rounded-xl border-2 ${darkMode ? 'border-white/10 bg-[#1a212c]' : 'border-cream-200 bg-cream-50'} p-4 hover:shadow-lg transition-all`}>
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-3">
@@ -4095,6 +4459,43 @@ function AdminSystem() {
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {tab === 'users' && (
+        <div className="space-y-4">
+          <form onSubmit={saveAdminUser} className={`grid grid-cols-1 md:grid-cols-2 gap-3 rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
+            <h3 className={`md:col-span-2 text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'}`}>{userForm.id ? 'ویرایش حساب مدیر' : 'ایجاد حساب مدیر'}</h3>
+            <input required disabled={Boolean(userForm.id)} value={userForm.username} onChange={e => setUserForm({ ...userForm, username: e.target.value })} placeholder="نام کاربری" className="rounded-xl border border-cream-300 px-3 py-2 text-[12px]" />
+            <input required value={userForm.name} onChange={e => setUserForm({ ...userForm, name: e.target.value })} placeholder="نام نمایشی" className="rounded-xl border border-cream-300 px-3 py-2 text-[12px]" />
+            <select required value={userForm.roleId} onChange={e => setUserForm({ ...userForm, roleId: e.target.value })} className="rounded-xl border border-cream-300 bg-white px-3 py-2 text-[12px]">
+              <option value="">انتخاب نقش</option>
+              {roles.map((role: any) => <option key={role.id} value={role.id}>{role.name}</option>)}
+            </select>
+            <input required={!userForm.id} type="password" minLength={12} value={userForm.password} onChange={e => setUserForm({ ...userForm, password: e.target.value })} placeholder={userForm.id ? 'رمز جدید (اختیاری، حداقل ۱۲ کاراکتر)' : 'رمز عبور (حداقل ۱۲ کاراکتر)'} className="rounded-xl border border-cream-300 px-3 py-2 text-[12px]" />
+            {userError && <p className="md:col-span-2 text-[12px] font-bold text-coral-600">{userError}</p>}
+            <div className="md:col-span-2 flex gap-2">
+              <button disabled={usersLoading} className="rounded-xl bg-brand-900 px-4 py-2 text-[12px] font-bold text-white disabled:opacity-50">{userForm.id ? 'ذخیره تغییرات' : 'ایجاد حساب'}</button>
+              {userForm.id && <button type="button" onClick={() => setUserForm({ id: '', username: '', name: '', roleId: '', password: '' })} className="rounded-xl border border-cream-300 px-4 py-2 text-[12px] font-bold">انصراف</button>}
+            </div>
+          </form>
+          <div className={`overflow-x-auto rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'}`}>
+            <table className="w-full text-[12px]">
+              <thead><tr className="border-b border-cream-300 text-start"><th className="p-3 text-start">نام کاربری</th><th className="p-3 text-start">نام</th><th className="p-3 text-start">نقش</th><th className="p-3 text-start">عملیات</th></tr></thead>
+              <tbody>{adminUsers.map((user: any) => (
+                <tr key={user.id} className="border-b border-cream-100">
+                  <td className="p-3">{user.username}{user.id === adminIdentity?.id ? ' (شما)' : ''}</td>
+                  <td className="p-3">{user.name}</td>
+                  <td className="p-3">{user.roleName || 'بدون نقش'}</td>
+                  <td className="p-3 flex gap-2">
+                    <button onClick={() => setUserForm({ id: user.id, username: user.username, name: user.name, roleId: user.roleId || '', password: '' })} className="font-bold text-brand-700">ویرایش</button>
+                    <button disabled={user.id === adminIdentity?.id} onClick={() => deleteAdminUser(user.id)} className="font-bold text-coral-600 disabled:opacity-40">حذف</button>
+                  </td>
+                </tr>
+              ))}</tbody>
+            </table>
+            {usersLoading && <p className="p-4 text-[11px] text-cream-500">در حال بارگذاری...</p>}
           </div>
         </div>
       )}
@@ -4208,31 +4609,32 @@ function AdminSystem() {
 
       {/* Integrations Tab */}
       {tab === 'integrations' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="space-y-3">
+          <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] leading-5 text-amber-800">وضعیت‌های این فهرست اتصال زنده را تأیید نمی‌کنند. سلامت سرویس‌ها باید از پیکربندی امن سرور و آزمون اتصال واقعی بررسی شود؛ این پنل هنوز آزمون اتصال ندارد.</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {integrations.map((i: any) => (
             <div key={i.id} className={`rounded-2xl border-2 ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-200 bg-white'} p-5 hover:shadow-lg transition-all`}>
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-3">
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${i.connected ? 'bg-emerald-100' : 'bg-cream-100'}`}>
-                    <IconLink className={`w-6 h-6 ${i.connected ? 'text-emerald-700' : 'text-cream-500'}`} />
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-cream-100">
+                    <IconLink className="w-6 h-6 text-cream-500" />
                   </div>
                   <div>
                     <p className={`text-[13px] font-bold ${darkMode ? 'text-white' : 'text-brand-900'}`}>{i.name}</p>
                     <p className="text-[10px] text-cream-500">{i.type === 'payment' ? 'درگاه پرداخت' : 'سرویس ارسال'}</p>
                   </div>
                 </div>
-                <button onClick={() => { setIntegrations(integrations.map((x: any) => x.id === i.id ? { ...x, connected: !x.connected } : x)); log(`${i.connected ? 'قطع' : 'اتصال'} ${i.name}`, i.id); }} className={`px-3 py-1.5 rounded-xl text-[11px] font-bold ${i.connected ? 'bg-emerald-100 text-emerald-700' : 'bg-cream-100 text-cream-500'}`}>
-                  {i.connected ? 'متصل' : 'قطع'}
-                </button>
+                <span className="px-3 py-1.5 rounded-xl bg-amber-100 text-amber-700 text-[11px] font-bold">تأییدنشده</span>
               </div>
               <div className={`rounded-lg ${darkMode ? 'bg-[#1a212c]' : 'bg-cream-50'} p-3`}>
                 <div className="flex items-center justify-between text-[11px]">
                   <span className="text-cream-500">تعداد تراکنش:</span>
-                  <span className="tnum font-bold">{faNum(i.txCount)}</span>
+                  <span className="font-bold">نامشخص</span>
                 </div>
               </div>
             </div>
           ))}
+          </div>
         </div>
       )}
 
@@ -4245,16 +4647,17 @@ function AdminSystem() {
             </div>
             <div>
               <h3 className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-brand-900'}`}>پشتیبان‌گیری و بازیابی</h3>
-              <p className="text-[11px] text-cream-500">مدیریت کامل داده‌های فروشگاه</p>
+              <p className="text-[11px] text-cream-500">نسخه کامل جداول PostgreSQL</p>
             </div>
           </div>
-          <p className="text-[12px] text-brand-700 leading-6">تمام داده‌های فروشگاه در localStorage مرورگر ذخیره می‌شوند. با پشتیبان‌گیری می‌توانید داده‌ها را به فایل JSON صادر و در صورت نیاز بازیابی کنید.</p>
+          <p className="text-[12px] text-brand-700 leading-6">فایل پشتیبان شامل تمام جداول عملیاتی، اطلاعات مشتریان و hash رمز حساب‌های مدیر است. فایل را رمزگذاری و در محل امن نگهداری کنید؛ این قابلیت جایگزین نسخه پشتیبان زمان‌بندی‌شده و خارج از سرور نیست.</p>
+          {backupError && <p className="rounded-xl bg-coral-50 p-3 text-[12px] font-bold text-coral-700">{backupError}</p>}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <button onClick={exportBackup} className="flex items-center justify-center gap-2 bg-brand-900 text-white px-4 py-3 rounded-xl text-[12px] font-bold shadow-lg shadow-brand-900/25 hover:bg-brand-950 transition-colors">
-              <IconDownload className="w-5 h-5" />دانلود فایل پشتیبان
+            <button disabled={backupBusy} onClick={exportBackup} className="flex items-center justify-center gap-2 bg-brand-900 text-white px-4 py-3 rounded-xl text-[12px] font-bold shadow-lg shadow-brand-900/25 hover:bg-brand-950 transition-colors disabled:opacity-50">
+              <IconDownload className="w-5 h-5" />{backupBusy ? 'در حال انجام...' : 'دانلود فایل پشتیبان'}
             </button>
             <input ref={backupRef} type="file" accept=".json" onChange={importBackup} className="hidden" />
-            <button onClick={() => backupRef.current?.click()} className="flex items-center justify-center gap-2 border-2 border-brand-900 text-brand-900 px-4 py-3 rounded-xl text-[12px] font-bold hover:bg-brand-50 transition-colors">
+            <button disabled={backupBusy} onClick={() => backupRef.current?.click()} className="flex items-center justify-center gap-2 border-2 border-brand-900 text-brand-900 px-4 py-3 rounded-xl text-[12px] font-bold hover:bg-brand-50 transition-colors disabled:opacity-50">
               <IconUpload className="w-5 h-5" />بازیابی از فایل
             </button>
           </div>
@@ -4263,7 +4666,7 @@ function AdminSystem() {
               <IconAlert className="w-5 h-5 text-amber-700 flex-shrink-0 mt-0.5" />
               <div>
                 <p className="text-[12px] font-bold text-amber-700 mb-1">توجه مهم</p>
-                <p className="text-[11px] text-amber-600 leading-5">داده‌ها در localStorage نگهداری می‌شوند و با پاک کردن حافظه مرورگر حذف خواهند شد. توصیه می‌شود به صورت دوره‌ای پشتیبان‌گیری کنید.</p>
+                <p className="text-[11px] text-amber-600 leading-5">بازیابی در تراکنش انجام می‌شود و در صورت نامعتبر بودن هر جدول، همه تغییرها rollback می‌شوند. حساب جاری و نقش مدیر سیستمی آن حفظ خواهد شد. برای آمادگی پروداکشن، ذخیره‌سازی خارج از سرور و زمان‌بندی خودکار backup همچنان لازم است.</p>
               </div>
             </div>
           </div>
@@ -4275,12 +4678,21 @@ function AdminSystem() {
 
 function AdminSettings() {
   const { darkMode } = useAdmin();
-  const { settings, setSettings: setShopSettings } = useShop();
+  const { settings, setSettings: setShopSettings, addToast } = useShop();
   const [form, setForm] = useState({ ...settings });
   const logoRef = useRef<HTMLInputElement>(null);
-  const bannerRef = useRef<HTMLInputElement>(null);
 
-  const save = () => { setShopSettings(form); };
+  useEffect(() => { setForm({ ...settings }); }, [settings]);
+
+  const save = async () => {
+    try {
+      const saved = await api.catalog.updateSettings(form);
+      setShopSettings(saved);
+      addToast('success', 'تنظیمات فروشگاه ذخیره شد');
+    } catch (error: any) {
+      addToast('danger', `ذخیره تنظیمات ناموفق بود: ${error.message}`);
+    }
+  };
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -4328,16 +4740,12 @@ function AdminSettings() {
       </div>
       <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
         <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-4`}>بنرهای صفحه اصلی</h3>
-        <p className="text-[11px] text-cream-500 mb-3">بنرها از بخش مدیریت محتوا قابل مدیریت هستند. برای افزودن بنر جدید به بخش «مدیریت محتوا» مراجعه کنید.</p>
-        <div className="flex items-center gap-3">
-          <input ref={bannerRef} type="file" accept="image/*" className="hidden" />
-          <button onClick={() => bannerRef.current?.click()} className="border border-cream-300 rounded-xl px-3 py-2 text-[11px] font-bold flex items-center gap-1"><IconUpload className="w-4 h-4" />آپلود تصویر بنر</button>
-        </div>
+        <p className="text-[11px] text-cream-500">بنرهای فعال از بخش «مدیریت محتوا» مدیریت می‌شوند و پس از ذخیره در صفحه اصلی نمایش داده خواهند شد.</p>
       </div>
       <div className={`rounded-2xl border border-coral-200 bg-coral-50 p-5`}>
-        <h3 className="text-sm font-bold text-coral-700 mb-2">منطقه خطر</h3>
-        <p className="text-[11px] text-coral-600 mb-3">بازنشانی تمام داده‌های فروشگاه به حالت اولیه</p>
-        <button onClick={() => { if (confirm('آیا مطمئن هستید؟ تمام داده‌ها حذف خواهند شد.')) { localStorage.clear(); window.location.reload(); } }} className="bg-coral-500 text-white px-4 py-2 rounded-xl text-[12px] font-bold">بازنشانی داده‌ها</button>
+        <h3 className="text-sm font-bold text-coral-700 mb-2">تنظیمات محلی این مرورگر</h3>
+        <p className="text-[11px] text-coral-600 mb-3">پاک‌سازی فقط نشست ورود و ترجیحات محلی این مرورگر را حذف می‌کند؛ سفارش‌ها و داده‌های پایگاه‌داده سرور تغییر نمی‌کنند.</p>
+        <button onClick={() => { if (confirm('نشست ادمین و ترجیحات ذخیره‌شده فقط در این مرورگر پاک شوند؟ داده‌های سرور دست‌نخورده می‌مانند.')) { localStorage.clear(); window.location.reload(); } }} className="bg-coral-500 text-white px-4 py-2 rounded-xl text-[12px] font-bold">پاک‌سازی داده‌های محلی</button>
       </div>
       <button onClick={save} className="bg-brand-900 text-white px-6 py-3 rounded-xl font-extrabold text-sm shadow-lg shadow-brand-900/25">ذخیره تنظیمات</button>
     </div>
@@ -4438,13 +4846,99 @@ function AdminInsights() {
 
 function AdminAffiliates() {
   const { affiliates, setAffiliates, payouts, setPayouts, affConf, setAffConf, darkMode, log } = useAdmin();
+  const { addToast } = useShop();
   const [tab, setTab] = useState<'affiliates' | 'payouts' | 'config' | 'tools'>('affiliates');
+  const [linkDestination, setLinkDestination] = useState(window.location.origin);
+  const [selectedAffiliateId, setSelectedAffiliateId] = useState('');
+  const [generatedLink, setGeneratedLink] = useState('');
+  const [commissionReviews, setCommissionReviews] = useState<any[]>([]);
+  const [loadingReviews, setLoadingReviews] = useState(false);
+
+  useEffect(() => {
+    if (tab !== 'payouts') return;
+    setLoadingReviews(true);
+    api.affiliate.reviewQueue()
+      .then((result) => setCommissionReviews(result.items))
+      .catch((error: any) => addToast('danger', `بارگذاری پورسانت‌های در انتظار بررسی ناموفق بود: ${error.message}`))
+      .finally(() => setLoadingReviews(false));
+  }, [tab, addToast]);
   
   const totalSales = affiliates.reduce((s: number, a: any) => s + a.sales, 0);
   const totalCommission = affiliates.reduce((s: number, a: any) => s + a.commission, 0);
   const flaggedCount = affiliates.filter((a: any) => a.flagged).length;
   const levelColors: Record<string, string> = { silver: 'bg-gray-100 text-gray-700', gold: 'bg-amber-100 text-amber-700', platinum: 'bg-purple-100 text-purple-700' };
   const levelLabels: Record<string, string> = { silver: 'نقره‌ای', gold: 'طلایی', platinum: 'پلاتینیوم' };
+  const addAffiliate = () => {
+    const name = window.prompt('نام بازاریاب را وارد کنید:')?.trim();
+    if (!name) return;
+    const mobile = window.prompt('شماره موبایل بازاریاب را وارد کنید:')?.trim();
+    if (!mobile) return;
+    const id = `af-${crypto.randomUUID()}`;
+    const refCode = `AF${crypto.randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase()}`;
+    setAffiliates([...affiliates, { id, name, mobile, refCode, level: 'silver', active: true, flagged: false, clicks: 0, orders: 0, sales: 0, commission: 0 }]);
+    log(`ایجاد بازاریاب ${name}`, id);
+  };
+  const generateAffiliateLink = () => {
+    const affiliate = affiliates.find((item: any) => item.id === selectedAffiliateId && item.active);
+    if (!affiliate) return;
+    try {
+      const target = new URL(linkDestination, window.location.origin);
+      if (target.origin !== window.location.origin) throw new Error('invalid_origin');
+      target.searchParams.set('ref', affiliate.refCode);
+      setGeneratedLink(target.toString());
+    } catch {
+      window.alert('آدرس مقصد باید در همین دامنهٔ فروشگاه باشد');
+    }
+  };
+  const copyAffiliateLink = async () => {
+    if (!navigator.clipboard) {
+      window.prompt('لینک را کپی کنید:', generatedLink);
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(generatedLink);
+      window.alert('لینک کپی شد');
+    } catch {
+      window.prompt('کپی خودکار در دسترس نیست؛ لینک را کپی کنید:', generatedLink);
+    }
+  };
+  const availablePayoutAmount = (affiliate: any) => {
+    const reserved = payouts
+      .filter((payout: any) => payout.affiliateId === affiliate.id && ['pending', 'paid'].includes(payout.status))
+      .reduce((sum: number, payout: any) => sum + Number(payout.amount || 0), 0);
+    return Math.max(0, Number(affiliate.commission || 0) - reserved - Number(affiliate.reviewRequiredCommission || 0));
+  };
+  const createAffiliatePayout = (affiliate: any) => {
+    const amount = availablePayoutAmount(affiliate);
+    if (amount < Number(affConf?.minWithdraw || 0)) return;
+    setPayouts([...payouts, {
+      id: `po-${crypto.randomUUID()}`,
+      source: 'affiliate_commission',
+      affiliateId: affiliate.id,
+      amount,
+      status: 'pending',
+      tracking: '',
+      date: new Date().toISOString(),
+    }]);
+  };
+  const resolveCommissionReview = async (commission: any, decision: 'approved' | 'rejected') => {
+    try {
+      await api.affiliate.reviewCommission(commission.id, decision);
+      const [reviewResult, affiliateResult, payoutResult] = await Promise.all([
+        api.affiliate.reviewQueue(),
+        api.affiliate.affiliates.list(),
+        api.affiliate.payouts.list(),
+      ]);
+      setCommissionReviews(reviewResult.items);
+      setAffiliates(affiliateResult.items);
+      setPayouts(payoutResult.items);
+      const outcome = decision === 'approved' ? 'تأیید شد و برای تسویه آزاد شد' : 'رد شد و از مبلغ پورسانت کسر شد';
+      log(`بررسی پورسانت سفارش ${commission.orderCode}: ${outcome}`, commission.id, decision === 'approved' ? 'info' : 'warning');
+      addToast('success', `پورسانت سفارش ${commission.orderCode} ${outcome}`);
+    } catch (error: any) {
+      addToast('danger', `ثبت نتیجه بررسی پورسانت ناموفق بود: ${error.message}`);
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -4473,6 +4967,9 @@ function AdminAffiliates() {
       {/* Affiliates Tab */}
       {tab === 'affiliates' && (
         <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} overflow-hidden`}>
+          <div className="flex justify-end p-3">
+            <button onClick={addAffiliate} className="rounded-xl bg-brand-900 px-4 py-2 text-[11px] font-bold text-white">افزودن بازاریاب</button>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-[12px]">
               <thead><tr className={`border-y ${darkMode ? 'border-white/10 bg-white/5' : 'border-cream-300 bg-cream-100/70'}`}>
@@ -4511,6 +5008,50 @@ function AdminAffiliates() {
       {/* Payouts Tab */}
       {tab === 'payouts' && (
         <div className="space-y-3">
+          <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] leading-5 text-amber-800">
+            ثبت پرداخت فقط ثبت دستیِ حواله‌ای است که خارج از سامانه انجام شده؛ انتقال بانکی از این پنل انجام یا تأیید نمی‌شود. پورسانت سفارش‌های دارای بازپرداخت تا بررسی دستی قابل تسویه نیست و پورسانت‌های قبلاً پرداخت‌شده خودکار پس گرفته نمی‌شوند.
+          </p>
+          <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-4`}>
+            <h3 className="mb-3 text-[12px] font-bold">پورسانت‌های قابل تسویه</h3>
+            {affiliates.filter((affiliate: any) => availablePayoutAmount(affiliate) > 0 && availablePayoutAmount(affiliate) >= Number(affConf?.minWithdraw || 0)).map((affiliate: any) => {
+              const available = availablePayoutAmount(affiliate);
+              return (
+                <div key={affiliate.id} className="mb-2 flex items-center justify-between rounded-lg bg-cream-50 p-3">
+                  <span className="text-[11px]">{affiliate.name} · {formatPrice(available)} تومان</span>
+                  <button onClick={() => createAffiliatePayout(affiliate)} className="rounded-lg bg-brand-900 px-3 py-1.5 text-[10px] font-bold text-white">ایجاد درخواست تسویه</button>
+                </div>
+              );
+            })}
+            {affiliates.some((affiliate: any) => Number(affiliate.reviewRequiredCommission || 0) > 0) && (
+              <div className="mt-3 rounded-lg bg-amber-50 p-3 text-[10px] leading-5 text-amber-800">
+                <p>پورسانت سفارش‌های مرجوعی تا بررسی دستی از مبلغ قابل تسویه خارج است. اگر پیش‌تر در تسویهٔ در انتظار رزرو شده، آن تسویه را رد کنید تا پورسانت‌های عادی آزاد شوند.</p>
+                {affiliates.filter((affiliate: any) => Number(affiliate.reviewRequiredCommission || 0) > 0).map((affiliate: any) => (
+                  <p key={affiliate.id} className="mt-1 font-bold">{affiliate.name}: {formatPrice(affiliate.reviewRequiredCommission)} تومان در انتظار بررسی</p>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-4`}>
+            <h3 className="mb-1 text-[12px] font-bold">پورسانت‌های متوقف‌شده برای بررسی مرجوعی</h3>
+            <p className="mb-3 text-[10px] leading-5 text-cream-500">تأیید، پورسانت را دوباره قابل تسویه می‌کند؛ رد استحقاق، پورسانت پرداخت‌نشده را از مانده حذف می‌کند. پورسانت حواله‌شدهٔ قبلی تغییر نمی‌کند. اگر پورسانت در تسویهٔ درانتظار رزرو شده باشد، ابتدا همان تسویه را رد کنید.</p>
+            {loadingReviews ? <p className="text-[11px] text-cream-500">در حال بارگذاری...</p> : commissionReviews.length === 0 ? (
+              <p className="text-[11px] text-cream-500">پورسانت متوقف‌شده‌ای برای بررسی وجود ندارد.</p>
+            ) : commissionReviews.map((commission: any) => (
+              <div key={commission.id} className="mb-2 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-amber-50 p-3">
+                <div className="text-[11px]">
+                  <p className="font-bold">{commission.affiliateName} · سفارش {commission.orderCode}</p>
+                  <p className="mt-1 text-cream-600">بازپرداخت ثبت‌شده: {formatPrice(commission.refundedAmount)} تومان · پورسانت متوقف‌شده: {formatPrice(commission.commissionAmount)} تومان</p>
+                  {commission.payoutId && <p className="mt-1 font-bold text-amber-800">در تسویهٔ درانتظار رزرو شده است؛ ابتدا تسویه را رد کنید.</p>}
+                </div>
+                {!commission.payoutId && (
+                  <div className="flex gap-2">
+                    <button onClick={() => resolveCommissionReview(commission, 'approved')} className="rounded-lg bg-emerald-700 px-3 py-2 text-[10px] font-bold text-white">تأیید و آزادسازی</button>
+                    <button onClick={() => resolveCommissionReview(commission, 'rejected')} className="rounded-lg bg-coral-100 px-3 py-2 text-[10px] font-bold text-coral-700">رد استحقاق</button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
           {payouts.map((p: any) => {
             const aff = affiliates.find((a: any) => a.id === p.affiliateId);
             return (
@@ -4522,12 +5063,17 @@ function AdminAffiliates() {
                 <div className="flex items-center gap-3">
                   <span className="tnum text-[13px] font-extrabold">{formatPrice(p.amount)} تومان</span>
                   <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${p.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : p.status === 'rejected' ? 'bg-coral-100 text-coral-700' : 'bg-amber-100 text-amber-700'}`}>
-                    {p.status === 'paid' ? 'پرداخت شده' : p.status === 'rejected' ? 'رد شده' : 'در انتظار'}
+                    {p.status === 'paid' ? 'پرداخت شده' : p.status === 'rejected' ? 'رد شده' : p.reviewRequired ? 'توقف تا بررسی مرجوعی' : 'در انتظار'}
                   </span>
                   {p.status === 'pending' && (
                     <div className="flex gap-1">
-                      <button onClick={() => { setPayouts(payouts.map((x: any) => x.id === p.id ? { ...x, status: 'paid', tracking: 'TRX-' + Date.now() } : x)); log(`پرداخت پورسانت ${aff?.name}`, p.id); }} className="px-2 py-1 rounded-lg bg-brand-900 text-white text-[10px] font-bold">پرداخت</button>
-                      <button onClick={() => { setPayouts(payouts.map((x: any) => x.id === p.id ? { ...x, status: 'rejected' } : x)); }} className="px-2 py-1 rounded-lg bg-coral-100 text-coral-700 text-[10px] font-bold">رد</button>
+                          {!p.reviewRequired && <button onClick={() => {
+                            const reference = window.prompt('پس از انجام حواله خارج از سامانه، شماره پیگیری بانکی را وارد کنید:');
+                            if (!reference?.trim()) return;
+                            setPayouts((current) => current.map((x: any) => x.id === p.id ? { ...x, status: 'paid', tracking: reference.trim() } : x));
+                            log(`ثبت پرداخت پورسانت ${aff?.name}`, p.id);
+                          }} className="px-2 py-1 rounded-lg bg-brand-900 text-white text-[10px] font-bold">ثبت حواله انجام‌شده</button>}
+                      <button onClick={() => { setPayouts((current) => current.map((x: any) => x.id === p.id ? { ...x, status: 'rejected' } : x)); }} className="px-2 py-1 rounded-lg bg-coral-100 text-coral-700 text-[10px] font-bold">رد</button>
                     </div>
                   )}
                 </div>
@@ -4541,6 +5087,7 @@ function AdminAffiliates() {
       {tab === 'config' && (
         <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
           <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-4`}>پیکربندی پورسانت</h3>
+          {affConf ? <div>
           <div className="grid grid-cols-2 gap-4">
             <div><label className="text-[11px] font-bold text-cream-500 mb-1 block">نرخ پایه (٪)</label><input type="number" value={affConf.baseRate} onChange={e => setAffConf({ ...affConf, baseRate: +e.target.value })} className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" /></div>
             <div><label className="text-[11px] font-bold text-cream-500 mb-1 block">اعتبار کوکی (روز)</label><input type="number" value={affConf.cookieDays} onChange={e => setAffConf({ ...affConf, cookieDays: +e.target.value })} className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" /></div>
@@ -4553,6 +5100,7 @@ function AdminAffiliates() {
               <div key={level}><label className="text-[10px] text-cream-500 mb-1 block">{levelLabels[level] || level} (٪ اضافی)</label><input type="number" value={bonus as number} onChange={e => setAffConf({ ...affConf, levelBonus: { ...affConf.levelBonus, [level]: +e.target.value } })} className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" /></div>
             ))}
           </div>
+          </div> : <p className="text-[11px] text-amber-700">پیکربندی پورسانت در دسترس نیست یا هنوز بارگذاری نشده است.</p>}
         </div>
       )}
 
@@ -4561,22 +5109,26 @@ function AdminAffiliates() {
         <div className="space-y-4">
           <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
             <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-3`}>تولید لینک عمیق</h3>
+            <p className="mb-3 rounded-lg bg-emerald-50 p-3 text-[11px] leading-5 text-emerald-800">بازدید از لینک ثبت می‌شود و انتساب آخرین کلیک معتبر تا پایان مهلت کوکی برای سفارش پرداخت‌شده حفظ خواهد شد.</p>
             <div className="flex gap-2">
-              <input placeholder="آدرس صفحه مقصد (مثلاً /product/p1)" className="flex-1 rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" />
-              <select className="rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none">
-                {affiliates.filter((a: any) => a.active).map((a: any) => <option key={a.id} value={a.refCode}>{a.name} ({a.refCode})</option>)}
+              <input value={linkDestination} onChange={e => setLinkDestination(e.target.value)} placeholder="آدرس مقصد" className="flex-1 rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" />
+              <select value={selectedAffiliateId} onChange={e => setSelectedAffiliateId(e.target.value)} className="rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none">
+                <option value="">انتخاب بازاریاب</option>
+                {affiliates.filter((a: any) => a.active).map((a: any) => <option key={a.id} value={a.id}>{a.name} ({a.refCode})</option>)}
               </select>
-              <button className="bg-brand-900 text-white px-4 py-2 rounded-xl text-[12px] font-bold">تولید لینک</button>
+              <button onClick={generateAffiliateLink} className="bg-brand-900 text-white px-4 py-2 rounded-xl text-[12px] font-bold">تولید لینک</button>
             </div>
+            {generatedLink && <div className="mt-3 flex gap-2"><input readOnly value={generatedLink} className="flex-1 rounded-xl border border-cream-300 px-3 py-2 text-[11px]" /><button onClick={copyAffiliateLink} className="rounded-xl border border-cream-300 px-3 py-2 text-[11px] font-bold">کپی</button></div>}
           </div>
           <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
             <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-3`}>کتابخانه بنرها</h3>
+            <p className="mb-3 text-[11px] text-cream-500">فایل بنر قابل دانلودی بارگذاری نشده است.</p>
             <div className="grid grid-cols-3 gap-3">
               {[{ w: '728x90', l: 'بنر افقی' }, { w: '300x300', l: 'بنر مربع' }, { w: '160x600', l: 'بنر عمودی' }].map((b, i) => (
                 <div key={i} className={`rounded-xl border-2 border-dashed ${darkMode ? 'border-white/20' : 'border-cream-300'} p-4 text-center`}>
                   <div className="bg-brand-100 rounded-lg mb-2 flex items-center justify-center" style={{ height: '60px' }}><span className="text-[10px] text-brand-700">{b.w}</span></div>
                   <p className="text-[11px] font-bold">{b.l}</p>
-                  <button className="mt-2 text-[10px] font-bold text-brand-600">دانلود</button>
+                  <button disabled className="mt-2 text-[10px] font-bold text-brand-600 disabled:opacity-50">دانلود</button>
                 </div>
               ))}
             </div>
@@ -4588,14 +5140,18 @@ function AdminAffiliates() {
 }
 
 function AdminPOS() {
-  const { products, setProducts } = useShop();
-  const { darkMode, log } = useAdmin();
+  const { products, setProducts, settings, addToast } = useShop();
+  const { darkMode, log, setOrders } = useAdmin();
   const [cart, setCart] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState('');
   const [customerName, setCustomerName] = useState('مشتری حضوری');
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card'>('cash');
+  const [paymentReference, setPaymentReference] = useState('');
+  const [submitting, setSubmitting] = useState(false);
   const [showReceipt, setShowReceipt] = useState(false);
   const [lastReceipt, setLastReceipt] = useState<any>(null);
+  const saleId = useRef<string | null>(null);
   const filtered = products.filter(p => p.effective && p.stock > 0 && (!catFilter || p.category === catFilter) && (!search || p.name.includes(search)));
 
   const addItem = (p: Product) => {
@@ -4615,17 +5171,52 @@ function AdminPOS() {
   };
 
   const subtotal = cart.reduce((s, c) => s + c.price * c.qty, 0);
-  const tax = Math.round(subtotal * 0.09);
+  const taxRate = settings.showPricesWithTax ? (settings.vatRate + settings.levyRate) / 100 : 0;
+  const tax = Math.round(subtotal * taxRate);
   const total = subtotal + tax;
 
-  const checkout = () => {
-    cart.forEach(c => { const p = products.find(x => x.id === c.id); if (p) p.stock -= c.qty; });
-    setProducts([...products]);
-    const receipt = { id: `POS-${Date.now()}`, customer: customerName, items: [...cart], subtotal, tax, total, date: new Date().toISOString() };
-    setLastReceipt(receipt);
-    setShowReceipt(true);
-    log(`فروش حضوری ${customerName} - ${formatPrice(total)} تومان`, 'pos');
-    setCart([]);
+  const checkout = async () => {
+    if (!cart.length || submitting) return;
+    if (paymentMethod === 'card' && !paymentReference.trim()) {
+      addToast('danger', 'پس از تأیید پرداخت کارتخوان، شماره پیگیری را وارد کنید');
+      return;
+    }
+    const id = saleId.current || crypto.randomUUID();
+    saleId.current = id;
+    setSubmitting(true);
+    try {
+      const result = await api.orders.posCheckout({
+        saleId: id,
+        customer: customerName,
+        paymentMethod,
+        paymentReference: paymentReference.trim() || undefined,
+        items: cart.map((item) => ({ productId: item.id, qty: item.qty })),
+      });
+      const receipt = { ...result.order, id: result.invoice.number, invoice: result.invoice };
+      setLastReceipt(receipt);
+      setShowReceipt(true);
+      setCart([]);
+      setPaymentReference('');
+      saleId.current = null;
+      log(`فروش حضوری ${customerName} - ${formatPrice(result.order.total)} تومان`, result.order.id);
+      addToast('success', 'فروش، موجودی و فاکتور ثبت شد');
+      try {
+        const latestOrders = await api.orders.list();
+        setOrders(latestOrders.items);
+      } catch (error: any) {
+        addToast('danger', `فروش ثبت شد، اما تازه‌سازی سفارش‌ها ناموفق بود: ${error.message}`);
+      }
+      try {
+        const latestProducts = await api.catalog.products();
+        setProducts(latestProducts.items);
+      } catch (error: any) {
+        addToast('danger', `فروش ثبت شد، اما تازه‌سازی موجودی ناموفق بود: ${error.message}`);
+      }
+    } catch (error: any) {
+      addToast('danger', `ثبت فروش ناموفق بود: ${error.message}`);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -4658,6 +5249,16 @@ function AdminPOS() {
       <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-4 h-fit sticky top-24`}>
         <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-3`}>فاکتور جاری</h3>
         <input value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="نام مشتری" className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none mb-3" />
+        <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value as 'cash' | 'card')} className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none mb-2">
+          <option value="cash">پرداخت نقدی</option>
+          <option value="card">کارتخوان (تأیید دستی)</option>
+        </select>
+        {paymentMethod === 'card' && (
+          <>
+            <p className="mb-2 text-[10px] leading-5 text-amber-700">اتصال مستقیم به کارتخوان وجود ندارد؛ فقط پس از مشاهده تأیید موفق دستگاه، پرداخت را دستی ثبت کنید.</p>
+            <input value={paymentReference} onChange={e => setPaymentReference(e.target.value)} placeholder="شماره پیگیری کارتخوان" className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none mb-3" />
+          </>
+        )}
         
         <div className="space-y-2 max-h-60 overflow-y-auto mb-3">
           {cart.length === 0 && <p className="text-[12px] text-cream-500 text-center py-4">سبد خالی است</p>}
@@ -4682,8 +5283,8 @@ function AdminPOS() {
             <div className="flex justify-between"><span className="text-cream-500">جمع اقلام:</span><span className="tnum">{formatPrice(subtotal)}</span></div>
             <div className="flex justify-between"><span className="text-cream-500">مالیات (۹٪):</span><span className="tnum">{formatPrice(tax)}</span></div>
             <div className="flex justify-between font-extrabold text-[14px] text-brand-900 pt-2 border-t border-cream-200"><span>مبلغ قابل پرداخت:</span><span className="tnum">{formatPrice(total)} تومان</span></div>
-            <button onClick={checkout} className="w-full mt-3 bg-brand-900 text-white py-3 rounded-xl font-extrabold text-[12px] shadow-lg shadow-brand-900/25 flex items-center justify-center gap-2">
-              <IconCheck className="w-4 h-4" /> صدور فاکتور و پرداخت
+            <button onClick={checkout} disabled={submitting || cart.length === 0} className="w-full mt-3 bg-brand-900 text-white py-3 rounded-xl font-extrabold text-[12px] shadow-lg shadow-brand-900/25 flex items-center justify-center gap-2 disabled:opacity-50">
+              <IconCheck className="w-4 h-4" /> {submitting ? 'در حال ثبت فروش...' : 'ثبت فروش و صدور فاکتور'}
             </button>
           </div>
         )}
@@ -4701,6 +5302,7 @@ function AdminPOS() {
             <div className="space-y-1 text-[12px] border-t border-cream-200 pt-3">
               <div className="flex justify-between"><span>مشتری:</span><span className="font-bold">{lastReceipt.customer}</span></div>
               <div className="flex justify-between"><span>تعداد اقلام:</span><span className="tnum">{faNum(lastReceipt.items.length)}</span></div>
+              <div className="flex justify-between"><span>وضعیت پرداخت:</span><span className="font-bold">پرداخت‌شده ({lastReceipt.payment === 'cash' ? 'نقدی' : 'کارتخوان - تأیید دستی'})</span></div>
               <div className="flex justify-between font-extrabold text-[14px] pt-2 border-t border-cream-200"><span>مبلغ:</span><span className="tnum">{formatPrice(lastReceipt.total)} تومان</span></div>
             </div>
             <button onClick={() => setShowReceipt(false)} className="w-full mt-4 bg-brand-900 text-white py-2.5 rounded-xl font-bold text-[12px]">فروش جدید</button>
@@ -4892,10 +5494,33 @@ function AdminContentManager() {
 
 function AdminVendors() {
   const { vendors, setVendors, darkMode, log } = useAdmin();
+  const { addToast } = useShop();
   const [tab, setTab] = useState<'vendors' | 'performance' | 'settlements'>('vendors');
+  const [settlements, setSettlements] = useState<any[]>([]);
   
   const totalSales = vendors.reduce((s: number, v: any) => s + v.totalSales, 0);
   const totalBalance = vendors.reduce((s: number, v: any) => s + v.balance, 0);
+
+  useEffect(() => {
+    api.logistics.settlements().then(({ items }) => setSettlements(items)).catch((error) => {
+      addToast('danger', `بارگذاری تاریخچه تسویه ناموفق بود: ${error.message}`);
+    });
+  }, [addToast]);
+
+  const settleVendor = async (vendor: any) => {
+    if (!(vendor.balance > 0)) return;
+    const reference = window.prompt('پس از انجام حواله خارج از سامانه، شماره پیگیری بانکی را وارد کنید:');
+    if (!reference?.trim()) return;
+    try {
+      const result = await api.logistics.settleVendor(vendor.id, reference.trim());
+      setVendors((current) => current.map((item: any) => item.id === vendor.id ? result.vendor : item));
+      setSettlements((current) => [result.settlement, ...current]);
+      log(`ثبت حواله انجام‌شده برای فروشنده ${vendor.name}`, result.settlement.id);
+      addToast('success', 'سند تسویه ثبت شد؛ انتقال بانکی خارج از سامانه انجام شده است');
+    } catch (error: any) {
+      addToast('danger', `ثبت سند تسویه ناموفق بود: ${error.message}`);
+    }
+  };
 
   const exportVendors = () => {
     const data = vendors.map((v: any) => ({
@@ -4951,7 +5576,7 @@ function AdminVendors() {
                       <p className="text-[10px] text-cream-500">{v.legalName} | {v.phone}</p>
                     </div>
                   </div>
-                  <button onClick={() => { setVendors(vendors.map((x: any) => x.id === v.id ? { ...x, active: !x.active } : x)); log(`${v.active ? 'غیرفعال' : 'فعال'} کردن فروشنده ${v.name}`, v.id); }} className={`w-10 h-5 rounded-full relative transition-colors ${v.active ? 'bg-emerald-500' : 'bg-cream-300'}`}>
+                  <button onClick={() => { setVendors((current) => current.map((x: any) => x.id === v.id ? { ...x, active: !x.active } : x)); log(`${v.active ? 'غیرفعال' : 'فعال'} کردن فروشنده ${v.name}`, v.id); }} className={`w-10 h-5 rounded-full relative transition-colors ${v.active ? 'bg-emerald-500' : 'bg-cream-300'}`}>
                     <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${v.active ? 'right-0.5' : 'right-5'}`}></span>
                   </button>
                 </div>
@@ -5006,7 +5631,8 @@ function AdminVendors() {
       {/* Settlements Tab */}
       {tab === 'settlements' && (
         <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
-          <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-4`}>درخواست تسویه</h3>
+          <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-2`}>ثبت حواله انجام‌شده</h3>
+          <p className="text-[11px] leading-5 text-cream-500 mb-4">این عملیات فقط مانده و سند حسابداری را ثبت می‌کند؛ انتقال وجه باید پیش‌تر از طریق بانک انجام شده باشد.</p>
           <div className="space-y-3">
             {vendors.filter((v: any) => v.balance > 0).map((v: any) => (
               <div key={v.id} className={`rounded-xl border ${darkMode ? 'border-white/10 bg-[#1a212c]' : 'border-cream-200 bg-cream-50'} p-4 flex items-center justify-between`}>
@@ -5016,10 +5642,22 @@ function AdminVendors() {
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="tnum text-[13px] font-extrabold text-amber-700">{formatPrice(v.balance)} تومان</span>
-                  <button onClick={() => { setVendors(vendors.map((x: any) => x.id === v.id ? { ...x, balance: 0 } : x)); log(`تسویه با فروشنده ${v.name}`, v.id); }} className="px-3 py-1.5 rounded-xl bg-brand-900 text-white text-[11px] font-bold">تسویه</button>
+                  <button onClick={() => settleVendor(v)} className="px-3 py-1.5 rounded-xl bg-brand-900 text-white text-[11px] font-bold">ثبت حواله</button>
                 </div>
               </div>
             ))}
+          </div>
+          <h4 className={`text-[12px] font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mt-6 mb-3`}>تاریخچه اسناد تسویه</h4>
+          <div className="space-y-2">
+            {settlements.map((settlement: any) => (
+              <div key={settlement.id} className={`rounded-xl border ${darkMode ? 'border-white/10 bg-[#1a212c]' : 'border-cream-200 bg-cream-50'} p-3 flex flex-wrap items-center justify-between gap-2 text-[11px]`}>
+                <span className="font-bold">{vendors.find((vendor: any) => vendor.id === settlement.vendorId)?.name || 'فروشنده حذف‌شده'}</span>
+                <span>{dayLabel(new Date(settlement.createdAt))}</span>
+                <span>مرجع: <b className="font-mono">{settlement.reference}</b></span>
+                <span className="font-extrabold">{formatPrice(settlement.amount)} تومان</span>
+              </div>
+            ))}
+            {!settlements.length && <p className="text-[11px] text-cream-500">سندی ثبت نشده است.</p>}
           </div>
         </div>
       )}
@@ -5028,20 +5666,72 @@ function AdminVendors() {
 }
 
 function AdminLogistics() {
-  const { carriers, setCarriers, orders, darkMode, log } = useAdmin();
+  const { carriers, darkMode, log } = useAdmin();
+  const { addToast } = useShop();
   const [tab, setTab] = useState<'carriers' | 'shipments' | 'tracking'>('carriers');
-  
-  const shippedOrders = orders.filter((o: any) => o.status === 'shipped' || o.status === 'processing');
-  const pendingShipment = orders.filter((o: any) => o.status === 'delivered' || o.status === 'processing').length;
+  const [trackingQuery, setTrackingQuery] = useState('');
+  const [submittedTrackingQuery, setSubmittedTrackingQuery] = useState('');
+  const [shipmentOrders, setShipmentOrders] = useState<any[]>([]);
+  const [shipmentDrafts, setShipmentDrafts] = useState<Record<string, any>>({});
+  const [shipmentLoading, setShipmentLoading] = useState(true);
+  const [shipmentLoadError, setShipmentLoadError] = useState('');
+  const [savingShipmentId, setSavingShipmentId] = useState('');
+
+  const loadShipmentOrders = useCallback(async () => {
+    setShipmentLoading(true);
+    setShipmentLoadError('');
+    try {
+      const result = await api.logistics.shipments.list();
+      setShipmentOrders(result.items);
+    } catch (error: any) {
+      setShipmentLoadError(error.message);
+      addToast('danger', `بارگذاری مرسوله‌ها ناموفق بود: ${error.message}`);
+    } finally {
+      setShipmentLoading(false);
+    }
+  }, [addToast]);
+  useEffect(() => { void loadShipmentOrders(); }, [loadShipmentOrders]);
+
+  const shippedOrders = shipmentOrders.filter((order: any) => order.status === 'shipped');
+  const pendingShipment = shipmentOrders.filter((order: any) => order.status === 'processing').length;
+  const trackingMatches = submittedTrackingQuery
+    ? shipmentOrders.filter((order: any) => [
+      order.code, order.tracking, order.trackingCode, ...(order.shipment?.events || []).map((event: any) => event.note),
+    ].some((value) => String(value || '').toLowerCase().includes(submittedTrackingQuery.toLowerCase())))
+    : [];
+  const shipmentStatusLabels: Record<string, string> = {
+    preparing: 'آماده‌سازی', shipped: 'تحویل به حامل', in_transit: 'در مسیر', delivered: 'تحویل‌شده', exception: 'نیازمند پیگیری',
+  };
+  const shipmentDraft = (order: any) => shipmentDrafts[order.id] || {
+    carrierId: order.shipment?.carrierId || '',
+    trackingCode: order.shipment?.trackingCode || '',
+    status: order.shipment?.status || (order.status === 'shipped' ? 'shipped' : order.status === 'delivered' ? 'delivered' : 'preparing'),
+    note: '',
+  };
+  const saveShipment = async (order: any) => {
+    const draft = shipmentDraft(order);
+    setSavingShipmentId(order.id);
+    try {
+      const result = await api.logistics.shipments.save(order.id, draft);
+      setShipmentOrders((current) => current.map((item) => item.id === order.id ? result.order : item));
+      setShipmentDrafts((current) => { const next = { ...current }; delete next[order.id]; return next; });
+      addToast('success', 'اطلاعات مرسوله ذخیره شد');
+      log(`به‌روزرسانی مرسوله سفارش ${order.code}`, order.id);
+    } catch (error: any) {
+      addToast('danger', `ذخیره مرسوله ناموفق بود: ${error.message}`);
+    } finally {
+      setSavingShipmentId('');
+    }
+  };
 
   return (
     <div className="space-y-4">
       {/* KPI */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
-          { l: 'حامل‌های فعال', v: faNum(carriers.filter((c: any) => c.active).length), c: 'bg-blue-50 text-blue-700', icon: <IconTruck className="w-5 h-5" /> },
+          { l: 'حامل‌های پیکربندی‌شده', v: faNum(carriers.filter((c: any) => c.active).length), c: 'bg-blue-50 text-blue-700', icon: <IconTruck className="w-5 h-5" /> },
           { l: 'در حال ارسال', v: faNum(shippedOrders.length), c: 'bg-amber-50 text-amber-700', icon: <IconPackage className="w-5 h-5" /> },
-          { l: 'تحویل شده', v: faNum(orders.filter((o: any) => o.status === 'delivered').length), c: 'bg-emerald-50 text-emerald-700', icon: <IconCheck className="w-5 h-5" /> },
+          { l: 'تحویل شده', v: faNum(shipmentOrders.filter((order: any) => order.status === 'delivered').length), c: 'bg-emerald-50 text-emerald-700', icon: <IconCheck className="w-5 h-5" /> },
           { l: 'آماده بسته‌بندی', v: faNum(pendingShipment), c: 'bg-purple-50 text-purple-700', icon: <IconBox className="w-5 h-5" /> },
         ].map((k, i) => (
           <div key={i} className={`rounded-xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-4`}>
@@ -5060,7 +5750,9 @@ function AdminLogistics() {
 
       {/* Carriers */}
       {tab === 'carriers' && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="space-y-3">
+          <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] leading-5 text-amber-800">اطلاعات حامل در این بخش داخلی است. اتصال API شرکت حمل و تولید برچسب خودکار فعال نیست؛ ثبت دستی مرسوله و کد رهگیری در مرکز مرسولات انجام می‌شود.</p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {carriers.map((c: any) => (
             <div key={c.id} className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5 hover:shadow-lg transition-all`}>
               <div className="flex items-center justify-between mb-3">
@@ -5073,9 +5765,7 @@ function AdminLogistics() {
                     <p className="text-[10px] text-cream-500">{c.deliveryDays}</p>
                   </div>
                 </div>
-                <button onClick={() => { setCarriers(carriers.map((x: any) => x.id === c.id ? { ...x, active: !x.active } : x)); log(`${c.active ? 'غیرفعال' : 'فعال'} کردن حامل ${c.name}`, c.id); }} className={`w-10 h-5 rounded-full relative transition-colors ${c.active ? 'bg-emerald-500' : 'bg-cream-300'}`}>
-                  <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${c.active ? 'right-0.5' : 'right-5'}`}></span>
-                </button>
+                <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${c.active ? 'bg-amber-100 text-amber-700' : 'bg-cream-100 text-cream-500'}`}>{c.active ? 'پیکربندی‌شده' : 'غیرفعال'}</span>
               </div>
               <div className="flex items-center justify-between text-[11px]">
                 <span className="text-cream-500">هزینه پایه:</span>
@@ -5083,41 +5773,57 @@ function AdminLogistics() {
               </div>
             </div>
           ))}
+          </div>
         </div>
       )}
 
       {/* Shipments */}
       {tab === 'shipments' && (
         <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} overflow-hidden`}>
+          <div className="flex justify-end p-3">
+            <button disabled={shipmentLoading} onClick={() => void loadShipmentOrders()} className="rounded-lg border border-cream-300 px-3 py-1.5 text-[10px] font-bold disabled:opacity-50">بازخوانی</button>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-[12px]">
               <thead><tr className={`border-y ${darkMode ? 'border-white/10 bg-white/5' : 'border-cream-300 bg-cream-100/70'}`}>
                 <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">کد سفارش</th>
-                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">مشتری</th>
-                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">شهر</th>
-                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">حامل</th>
-                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">وضعیت</th>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">مشتری / شهر</th>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">حامل و رهگیری دستی</th>
+                <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">وضعیت مرسوله</th>
                 <th className="text-start py-2.5 px-3 font-bold text-cream-500 text-[10.5px]">عملیات</th>
               </tr></thead>
               <tbody>
-                {orders.filter((o: any) => o.status !== 'cancelled' && o.status !== 'pending').slice(0, 15).map((o: any) => (
+                {shipmentOrders.map((o: any) => {
+                  const draft = shipmentDraft(o);
+                  const currentCarrier = carriers.find((carrier: any) => carrier.id === draft.carrierId);
+                  return (
                   <tr key={o.id} className={`border-b ${darkMode ? 'border-white/5 hover:bg-white/5' : 'border-cream-100 hover:bg-brand-50/40'}`}>
                     <td className="py-2.5 px-3 font-bold">{o.code}</td>
-                    <td className="py-2.5 px-3">{o.customer}</td>
-                    <td className="py-2.5 px-3">{o.city}</td>
-                    <td className="py-2.5 px-3 text-[11px]">{carriers[0]?.name || '-'}</td>
-                    <td className="py-2.5 px-3">
-                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${o.status === 'delivered' ? 'bg-emerald-100 text-emerald-700' : o.status === 'shipped' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
-                        {o.status === 'delivered' ? 'تحویل شده' : o.status === 'shipped' ? 'ارسال شده' : 'بسته‌بندی'}
-                      </span>
+                    <td className="py-2.5 px-3">{o.customer}<br /><span className="text-[10px] text-cream-500">{o.city}</span></td>
+                    <td className="min-w-[260px] py-2.5 px-3">
+                      <select value={draft.carrierId} onChange={e => setShipmentDrafts(current => ({ ...current, [o.id]: { ...draft, carrierId: e.target.value } }))} className="mb-1 w-full rounded-lg border border-cream-300 px-2 py-1.5 text-[10px]">
+                        <option value="">انتخاب حامل</option>
+                        {currentCarrier && !currentCarrier.active && <option value={currentCarrier.id}>{currentCarrier.name} (غیرفعال)</option>}
+                        {carriers.filter((carrier: any) => carrier.active).map((carrier: any) => <option key={carrier.id} value={carrier.id}>{carrier.name}</option>)}
+                      </select>
+                      <input value={draft.trackingCode} onChange={e => setShipmentDrafts(current => ({ ...current, [o.id]: { ...draft, trackingCode: e.target.value } }))} placeholder="کد رهگیری حامل" className="w-full rounded-lg border border-cream-300 px-2 py-1.5 text-[10px]" />
                     </td>
                     <td className="py-2.5 px-3">
-                      <button className="p-1.5 rounded-lg hover:bg-cream-100 text-brand-600" title="چاپ برچسب"><IconPrint className="w-4 h-4" /></button>
+                      <select value={draft.status} onChange={e => setShipmentDrafts(current => ({ ...current, [o.id]: { ...draft, status: e.target.value } }))} className="rounded-lg border border-cream-300 px-2 py-1.5 text-[10px]">
+                        {Object.entries(shipmentStatusLabels).map(([status, label]) => <option key={status} value={status}>{label}</option>)}
+                      </select>
+                      <input value={draft.note} onChange={e => setShipmentDrafts(current => ({ ...current, [o.id]: { ...draft, note: e.target.value } }))} placeholder="یادداشت قابل نمایش به مشتری" maxLength={240} className="mt-1 w-full rounded-lg border border-cream-300 px-2 py-1.5 text-[10px]" />
                     </td>
-                  </tr>
-                ))}
+                    <td className="py-2.5 px-3">
+                      <button disabled={savingShipmentId === o.id} onClick={() => saveShipment(o)} className="rounded-lg bg-brand-900 px-3 py-2 text-[10px] font-bold text-white disabled:opacity-50">{savingShipmentId === o.id ? 'در حال ذخیره…' : 'ذخیره مرسوله'}</button>
+                    </td>
+                  </tr>);
+                })}
               </tbody>
             </table>
+            {shipmentLoading && <p className="p-4 text-[11px] text-cream-500">در حال بارگذاری مرسوله‌ها…</p>}
+            {!shipmentLoading && shipmentLoadError && <p className="p-4 text-[11px] text-coral-600">بارگذاری مرسوله‌ها ناموفق بود. برای تلاش دوباره، بازخوانی کنید.</p>}
+            {!shipmentLoading && !shipmentLoadError && shipmentOrders.length === 0 && <p className="p-4 text-[11px] text-cream-500">سفارش پرداخت‌شده‌ای برای ارسال وجود ندارد.</p>}
           </div>
         </div>
       )}
@@ -5125,28 +5831,25 @@ function AdminLogistics() {
       {/* Tracking */}
       {tab === 'tracking' && (
         <div className={`rounded-2xl border ${darkMode ? 'border-white/10 bg-[#151b26]' : 'border-cream-300 bg-white'} p-5`}>
-          <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-4`}>رهگیری مرسولات</h3>
+          <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-brand-900'} mb-2`}>جستجوی سفارش و کد رهگیری ثبت‌شده</h3>
+          <p className="text-[11px] text-cream-500 mb-4">این صفحه فقط اطلاعات ثبت‌شده در فروشگاه را جستجو می‌کند و استعلام زنده از حامل انجام نمی‌دهد.</p>
           <div className="flex gap-2 mb-4">
-            <input placeholder="کد رهگیری یا شماره سفارش..." className="flex-1 rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" />
-            <button className="bg-brand-900 text-white px-4 py-2 rounded-xl text-[12px] font-bold">رهگیری</button>
+            <input value={trackingQuery} onChange={(event) => setTrackingQuery(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && setSubmittedTrackingQuery(trackingQuery.trim())} placeholder="کد رهگیری یا شماره سفارش..." className="flex-1 rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" />
+            <button onClick={() => setSubmittedTrackingQuery(trackingQuery.trim())} className="bg-brand-900 text-white px-4 py-2 rounded-xl text-[12px] font-bold">جستجو</button>
           </div>
           <div className="space-y-3">
-            {orders.filter((o: any) => o.status === 'shipped').slice(0, 5).map((o: any) => (
+            {trackingMatches.map((o: any) => (
               <div key={o.id} className={`rounded-xl border ${darkMode ? 'border-white/10 bg-[#1a212c]' : 'border-cream-200 bg-cream-50'} p-4`}>
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-[12px] font-bold">{o.code} - {o.customer}</span>
                   <span className="text-[10px] text-cream-500">{o.city}</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  {['بسته‌بندی', 'تحویل به پست', 'در مسیر', 'تحویل'].map((step, i) => (
-                    <React.Fragment key={step}>
-                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold ${i <= 1 ? 'bg-brand-900 text-white' : 'bg-cream-200 text-cream-500'}`}>{faNum(i + 1)}</div>
-                      {i < 3 && <div className={`flex-1 h-0.5 ${i < 1 ? 'bg-brand-900' : 'bg-cream-200'}`}></div>}
-                    </React.Fragment>
-                  ))}
-                </div>
+                <p className="text-[11px]">وضعیت سفارش: {o.status} | حامل: {o.shipment?.carrierName || o.carrier || 'ثبت نشده'} | کد رهگیری: {o.shipment?.trackingCode || o.tracking || o.trackingCode || 'ثبت نشده'}</p>
+                {o.shipment?.events?.length > 0 && <ol className="mt-2 space-y-1 border-s-2 border-cream-300 ps-3">{[...o.shipment.events].reverse().map((event: any) => <li key={event.id} className="text-[10px] text-cream-600">{dayLabel(new Date(event.createdAt))} · {event.label}{event.note ? ` — ${event.note}` : ''}</li>)}</ol>}
               </div>
             ))}
+            {shipmentLoading && <p className="py-4 text-center text-[11px] text-cream-500">در حال بارگذاری…</p>}
+            {submittedTrackingQuery && !shipmentLoading && !shipmentLoadError && trackingMatches.length === 0 && <p className="py-4 text-center text-[11px] text-cream-500">سفارشی با این کد یافت نشد.</p>}
           </div>
         </div>
       )}
@@ -5200,6 +5903,330 @@ function AdminTasks() {
 }
 
 /* ─────────── Main App ─────────── */
+/* ─────────── Customer Auth (OTP) ─────────── */
+function CustomerLogin() {
+  const { setView, customer, setCustomer, addToast } = useShop();
+  const [phone, setPhone] = useState('');
+  const [code, setCode] = useState('');
+  const [name, setName] = useState('');
+  const [step, setStep] = useState<'phone' | 'code'>('phone');
+  const [loading, setLoading] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
+  const [err, setErr] = useState('');
+  const [devOtp, setDevOtp] = useState('');
+
+  useEffect(() => { if (cooldown <= 0) return; const t = setInterval(() => setCooldown(c => c - 1), 1000); return () => clearInterval(t); }, [cooldown]);
+
+  const requestCode = async () => {
+    if (phone.replace(/\D/g, '').length < 11) { setErr('شماره موبایل معتبر وارد کنید'); return; }
+    setLoading(true); setErr('');
+    try {
+      const res = await api.auth.requestOtp(phone);
+      setStep('code');
+      setCooldown(60);
+      setDevOtp(res.devOtp || '');
+      addToast('success', res.message);
+    } catch (e: any) { setErr(e.message || 'خطا در ارسال کد'); }
+    finally { setLoading(false); }
+  };
+
+  const verify = async () => {
+    if (code.length < 4) { setErr('کد تأیید را کامل وارد کنید'); return; }
+    setLoading(true); setErr('');
+    try {
+      const res = await api.auth.verifyOtp(phone, code, name || undefined);
+      api.setToken(res.token);
+      setCustomer(res.customer);
+      addToast('success', 'خوش آمدید!');
+      setView('account');
+    } catch (e: any) { setErr(e.message || 'کد تأیید نامعتبر است'); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <div className="max-w-sm mx-auto px-4 py-12 animate-rise">
+      <div className="bg-white rounded-2xl border border-cream-200 shadow-lg p-6 text-center">
+        <div className="w-14 h-14 rounded-xl bg-brand-900 flex items-center justify-center mx-auto mb-4"><span className="text-white font-display text-xl">ت</span></div>
+        <h2 className="font-display text-lg text-brand-900 mb-1">{step === 'phone' ? 'ورود / ثبت‌نام' : 'کد تأیید'}</h2>
+        <p className="text-[12px] text-cream-500 mb-5">{step === 'phone' ? 'با شماره موبایل خود وارد شوید' : `کد ۶ رقمی ارسال‌شده به ${phone} را وارد کنید`}</p>
+
+        {step === 'phone' ? (
+          <div className="space-y-3 text-start">
+            <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="۰۹۱۲۳۴۵۶۷۸۹" inputMode="tel" className="w-full rounded-xl border border-cream-300 bg-cream-50 px-4 py-3 text-center text-[15px] font-bold tracking-widest outline-none focus:border-brand-400" />
+            <input value={name} onChange={e => setName(e.target.value)} placeholder="نام و نام خانوادگی (اختیاری)" className="w-full rounded-xl border border-cream-300 bg-cream-50 px-4 py-2.5 text-[13px] outline-none focus:border-brand-400" />
+            {err && <p className="text-[11px] text-coral-600 font-bold text-center">{err}</p>}
+            <button onClick={requestCode} disabled={loading} className="w-full bg-brand-900 text-white py-3 rounded-xl font-extrabold text-sm disabled:opacity-60">{loading ? 'در حال ارسال...' : 'دریافت کد تأیید'}</button>
+          </div>
+        ) : (
+          <div className="space-y-3 text-start">
+            <input value={code} onChange={e => setCode(e.target.value)} placeholder="------" inputMode="numeric" maxLength={6} className="w-full rounded-xl border border-cream-300 bg-cream-50 px-4 py-3 text-center text-[18px] font-bold tracking-[0.5em] outline-none focus:border-brand-400 tnum" />
+            {devOtp && (
+              <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-center">
+                <p className="text-[11px] text-amber-700 font-bold">حالت تستی (کاوه‌نگار متصل نیست)</p>
+                <p className="text-[15px] font-extrabold text-amber-800 tnum mt-1">کد شما: {devOtp}</p>
+              </div>
+            )}
+            {err && <p className="text-[11px] text-coral-600 font-bold text-center">{err}</p>}
+            <button onClick={verify} disabled={loading} className="w-full bg-brand-900 text-white py-3 rounded-xl font-extrabold text-sm disabled:opacity-60">{loading ? 'در حال بررسی...' : 'ورود به حساب'}</button>
+            <button onClick={() => { if (cooldown === 0) requestCode(); }} disabled={cooldown > 0} className="w-full text-[11px] text-cream-500 py-1 disabled:opacity-50">{cooldown > 0 ? `ارسال مجدد تا ${faNum(cooldown)} ثانیه` : 'ارسال مجدد کد'}</button>
+            <button onClick={() => { setStep('phone'); setCode(''); setDevOtp(''); }} className="w-full text-[11px] font-bold text-brand-600">ویرایش شماره موبایل</button>
+          </div>
+        )}
+        <button onClick={() => setView('home')} className="mt-4 text-[11px] text-cream-500 hover:text-brand-700">بازگشت به فروشگاه</button>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────── Customer Account ─────────── */
+function CustomerAccount() {
+  const { customer, setView, logoutCustomer, money, addToast } = useShop();
+  const [orders, setOrders] = useState<any[]>([]);
+  const [rmas, setRmas] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [name, setName] = useState(customer?.name || '');
+  const [saving, setSaving] = useState(false);
+  const [returnOrderId, setReturnOrderId] = useState('');
+  const [returnProductId, setReturnProductId] = useState('');
+  const [returnQuantity, setReturnQuantity] = useState(1);
+  const [returnReason, setReturnReason] = useState('');
+  const [submittingReturn, setSubmittingReturn] = useState(false);
+
+  useEffect(() => {
+    if (!customer) {
+      setOrders([]);
+      setRmas([]);
+      setLoading(false);
+      return;
+    }
+    let active = true;
+    setLoading(true);
+    Promise.all([api.orders.mine(), api.support.rmas.mine()])
+      .then(([orderResult, rmaResult]) => {
+        if (!active) return;
+        setOrders(orderResult.items);
+        setRmas(rmaResult.items);
+      })
+      .catch((error: any) => {
+        if (active) addToast('danger', `بارگذاری سفارش‌ها یا درخواست‌های مرجوعی ناموفق بود: ${error.message}`);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => { active = false; };
+  }, [addToast, customer?.id]);
+
+  useEffect(() => {
+    if (!customer) setView('login');
+  }, [customer, setView]);
+
+  if (!customer) return null;
+
+  const saveName = async () => {
+    if (!name.trim()) return;
+    setSaving(true);
+    try {
+      await api.auth.updateName(name.trim());
+      addToast('success', 'نام شما به‌روزرسانی شد');
+    } catch (e: any) { addToast('danger', e.message || 'خطا در ذخیره'); }
+    finally { setSaving(false); }
+  };
+  const submitReturn = async (order: any) => {
+    const line = order.items?.find((item: any) => item.productId === returnProductId);
+    if (!line || !returnReason.trim() || !Number.isSafeInteger(returnQuantity) || returnQuantity < 1) {
+      addToast('danger', 'کالا، تعداد و دلیل مرجوعی را کامل کنید');
+      return;
+    }
+    const alreadyRequested = rmas
+      .filter((rma: any) => rma.orderId === order.id && rma.productId === returnProductId && rma.status !== 'rejected')
+      .reduce((sum: number, rma: any) => sum + Number(rma.quantity || 0), 0);
+    if (alreadyRequested + returnQuantity > Number(line.qty || 0)) {
+      addToast('danger', 'تعداد مرجوعی از تعداد خریداری‌شده بیشتر است');
+      return;
+    }
+    setSubmittingReturn(true);
+    try {
+      const rma = await api.support.rmas.requestReturn({
+        orderId: order.id,
+        productId: returnProductId,
+        quantity: returnQuantity,
+        reason: returnReason.trim(),
+      });
+      setRmas((current) => [rma, ...current]);
+      setReturnOrderId('');
+      setReturnProductId('');
+      setReturnQuantity(1);
+      setReturnReason('');
+      addToast('success', 'درخواست مرجوعی ثبت شد و برای بررسی به فروشگاه ارسال شد');
+    } catch (error: any) {
+      addToast('danger', `ثبت درخواست مرجوعی ناموفق بود: ${error.message}`);
+    } finally {
+      setSubmittingReturn(false);
+    }
+  };
+
+  const statusLabels: Record<string, string> = { pending: 'در انتظار پرداخت', processing: 'در حال پردازش', shipped: 'ارسال شده', delivered: 'تحویل شده', cancelled: 'لغو شده' };
+  const payLabels: Record<string, string> = { unpaid: 'پرداخت‌نشده', paid: 'پرداخت‌شده', failed: 'ناموفق' };
+
+  return (
+    <div className="max-w-3xl mx-auto px-4 py-8 animate-fade">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="font-display text-xl text-brand-900">حساب کاربری</h1>
+          <p className="text-[12px] text-cream-500 mt-1">{customer.name || 'مشتری'} — {faNum(customer.phone)}</p>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={() => { logoutCustomer(); setView('home'); }} className="border border-cream-300 text-brand-700 px-3 py-2 rounded-xl text-[11px] font-bold hover:border-coral-400 hover:text-coral-600">خروج از حساب</button>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-cream-200 p-4 mb-4">
+        <h3 className="text-[13px] font-bold text-brand-900 mb-3">ویرایش نام</h3>
+        <div className="flex gap-2">
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="نام و نام خانوادگی" className="flex-1 rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none focus:border-brand-400" />
+          <button onClick={saveName} disabled={saving} className="bg-brand-900 text-white px-4 py-2 rounded-xl text-[11px] font-bold disabled:opacity-60">{saving ? '...' : 'ذخیره'}</button>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-cream-200 p-4">
+        <h3 className="text-[13px] font-bold text-brand-900 mb-3">سفارش‌های من ({faNum(orders.length)})</h3>
+        {loading ? <p className="text-[12px] text-cream-500 py-6 text-center">در حال بارگذاری...</p> : orders.length === 0 ? (
+          <div className="text-center py-8">
+            <p className="text-[12px] text-cream-500 mb-3">هنوز سفارشی ثبت نکرده‌اید</p>
+            <button onClick={() => setView('shop')} className="bg-brand-900 text-white px-4 py-2 rounded-xl text-[11px] font-bold">مشاهده محصولات</button>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {orders.map(o => {
+              const orderRmas = rmas.filter((rma: any) => rma.orderId === o.id);
+              const selectedLine = o.items?.find((item: any) => item.productId === returnProductId);
+              const alreadyRequested = rmas
+                .filter((rma: any) => rma.orderId === o.id && rma.productId === returnProductId && rma.status !== 'rejected')
+                .reduce((sum: number, rma: any) => sum + Number(rma.quantity || 0), 0);
+              return (
+              <div key={o.id} className="border border-cream-200 rounded-xl p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-3">
+                    <div>
+                      <p className="text-[12px] font-bold text-brand-900 tnum">{o.code}</p>
+                      <p className="text-[10px] text-cream-500">{o.items?.length || 0} کالا — {dayLabel(o.createdAt)}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className={`text-[10px] font-bold px-2 py-1 rounded-lg ${o.payment_status === 'paid' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>{payLabels[o.payment_status] || o.payment_status}</span>
+                    <span className="text-[10px] font-bold px-2 py-1 rounded-lg bg-cream-50 text-brand-700">{statusLabels[o.status] || o.status}</span>
+                    <span className="text-[13px] font-extrabold text-brand-900">{money(o.total)}</span>
+                    {o.payment_status !== 'paid' && (
+                      <button onClick={async () => {
+                        try { const pay = await api.orders.paymentStart(o.id); window.location.href = pay.redirectUrl; }
+                        catch (e: any) { addToast('danger', e.message || 'خطا در شروع پرداخت'); }
+                      }} className="bg-coral-500 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold hover:bg-coral-600">پرداخت</button>
+                    )}
+                    {o.status === 'delivered' && o.payment_status === 'paid' && (
+                      <button onClick={() => {
+                        setReturnOrderId(returnOrderId === o.id ? '' : o.id);
+                        setReturnProductId(o.items?.[0]?.productId || '');
+                        setReturnQuantity(1);
+                        setReturnReason('');
+                      }} className="rounded-lg border border-brand-300 px-3 py-1.5 text-[10px] font-bold text-brand-800">
+                        {returnOrderId === o.id ? 'بستن فرم مرجوعی' : 'درخواست مرجوعی'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+                {orderRmas.length > 0 && (
+                  <div className="mt-3 space-y-1 border-t border-cream-100 pt-2">
+                    {orderRmas.map((rma: any) => (
+                      <p key={rma.id} className="text-[10px] text-cream-600">
+                        درخواست {rma.productName} × {faNum(rma.quantity)} — {statusLabels[rma.status] || ({
+                          requested: 'در انتظار بررسی',
+                          approved: 'تأیید شده',
+                          quality_check: 'در حال بررسی کالا',
+                          returned: 'کالا تحویل انبار شد',
+                          refunded: 'بازپرداخت ثبت شد',
+                          rejected: 'رد شده',
+                        } as Record<string, string>)[rma.status] || rma.status}
+                      </p>
+                    ))}
+                  </div>
+                )}
+                {returnOrderId === o.id && (
+                  <div className="mt-3 grid gap-2 border-t border-cream-100 pt-3 sm:grid-cols-2">
+                    <label className="space-y-1 text-[10px] text-cream-600">کالا
+                      <select value={returnProductId} onChange={(event) => { setReturnProductId(event.target.value); setReturnQuantity(1); }} className="w-full rounded-lg border border-cream-300 bg-white p-2 text-xs text-brand-900">
+                        {o.items?.map((item: any) => {
+                          const used = orderRmas.filter((rma: any) => rma.productId === item.productId && rma.status !== 'rejected').reduce((sum: number, rma: any) => sum + Number(rma.quantity || 0), 0);
+                          return <option key={item.productId} value={item.productId} disabled={used >= Number(item.qty || 0)}>{item.name} — باقی‌مانده {faNum(Math.max(0, item.qty - used))}</option>;
+                        })}
+                      </select>
+                    </label>
+                    <label className="space-y-1 text-[10px] text-cream-600">تعداد
+                      <input type="number" min={1} max={Math.max(1, Number(selectedLine?.qty || 1) - alreadyRequested)} value={returnQuantity} onChange={(event) => setReturnQuantity(Number(event.target.value))} className="w-full rounded-lg border border-cream-300 p-2 text-xs" />
+                    </label>
+                    <label className="space-y-1 text-[10px] text-cream-600 sm:col-span-2">دلیل مرجوعی
+                      <textarea value={returnReason} maxLength={1000} onChange={(event) => setReturnReason(event.target.value)} className="w-full rounded-lg border border-cream-300 p-2 text-xs" rows={2} />
+                    </label>
+                    <div className="sm:col-span-2">
+                      <button disabled={submittingReturn || !selectedLine || alreadyRequested >= Number(selectedLine.qty || 0)} onClick={() => submitReturn(o)} className="rounded-lg bg-brand-900 px-4 py-2 text-[10px] font-bold text-white disabled:opacity-50">
+                        {submittingReturn ? 'در حال ثبت...' : 'ثبت درخواست برای بررسی'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );})}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ─────────── Payment Result (بازگشت از درگاه زرین‌پال) ─────────── */
+function PaymentResult() {
+  const [params] = useState(() => new URLSearchParams(window.location.search));
+  const { setView, money } = useShop();
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  const status = params.get('status') || 'error';
+  const orderCode = params.get('order') || '';
+  const ref = params.get('ref') || '';
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const q: any = {};
+        if (ref) q.order = orderCode; else q.order = orderCode;
+        const res = await api.orders.paymentStatus(q);
+        setData(res);
+      } catch { /* نمایش بر اساس پارامترهای URL */ }
+      finally { setLoading(false); };
+    };
+    load();
+  }, []);
+
+  const success = status === 'success';
+  const order = data?.order;
+
+  return (
+    <div className="max-w-lg mx-auto px-4 py-16 text-center animate-fade">
+      <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${success ? 'bg-emerald-100' : 'bg-coral-100'}`}>
+        {success ? <IconCheck className="w-8 h-8 text-emerald-600" /> : <IconX className="w-8 h-8 text-coral-600" />}
+      </div>
+      <h2 className="text-xl font-extrabold text-brand-900 mb-2">{success ? 'پرداخت با موفقیت انجام شد' : 'پرداخت ناموفق بود'}</h2>
+      {orderCode && <p className="text-[13px] text-brand-700 mb-1">کد سفارش: <span className="font-bold tnum">{orderCode}</span></p>}
+      {ref && <p className="text-[12px] text-cream-500 mb-1">شماره پیگیری بانکی: <span className="font-bold tnum">{ref}</span></p>}
+      {!loading && order && <p className="text-[13px] text-brand-700">مبلغ پرداخت: <span className="font-extrabold">{money(order.total)}</span></p>}
+      {!success && <p className="text-[11px] text-cream-500 mt-2">در صورت کسر مبلغ، تا ۷۲ ساعت به حساب شما بازمی‌گردد.</p>}
+      <div className="flex gap-2 justify-center mt-6">
+        <button onClick={() => { window.history.replaceState({}, '', '/'); setView('account'); }} className="bg-brand-900 text-white px-5 py-2.5 rounded-xl text-[12px] font-bold">سفارش‌های من</button>
+        <button onClick={() => { window.history.replaceState({}, '', '/'); setView('shop'); }} className="border border-cream-300 text-brand-700 px-5 py-2.5 rounded-xl text-[12px] font-bold">ادامه خرید</button>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   return (
     <ShopProvider>
@@ -5211,10 +6238,15 @@ export default function App() {
 }
 
 function AppContent() {
-  const { view } = useShop();
+  const { view, setView } = useShop();
   const { isAdmin } = useAdmin();
 
-  if (view === 'admin' || (isAdmin && view !== 'home' && view !== 'shop' && view !== 'product' && view !== 'cart' && view !== 'blog' && view !== 'post')) {
+  // بازگشت از درگاه پرداخت (زرین‌پال) به مسیر /payment-result
+  useEffect(() => {
+    if (window.location.pathname === '/payment-result') setView('payment-result');
+  }, []);
+
+  if (view === 'admin' || (isAdmin && view !== 'home' && view !== 'shop' && view !== 'product' && view !== 'cart' && view !== 'blog' && view !== 'post' && view !== 'login' && view !== 'account' && view !== 'payment-result')) {
     return <AdminPanel />;
   }
 
@@ -5228,6 +6260,9 @@ function AppContent() {
         {view === 'cart' && <CartView />}
         {view === 'blog' && <BlogView />}
         {view === 'post' && <BlogPostView />}
+        {view === 'login' && <CustomerLogin />}
+        {view === 'account' && <CustomerAccount />}
+        {view === 'payment-result' && <PaymentResult />}
       </main>
       <Footer />
       <Toasts />

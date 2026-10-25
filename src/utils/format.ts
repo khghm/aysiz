@@ -57,12 +57,14 @@ export function faTime(d?: Date): string {
   } catch { return ''; }
 }
 
-export function dayLabel(d: Date): string {
+export function dayLabel(d: any): string {
+  const date = d instanceof Date ? d : new Date(d);
+  if (isNaN(date.getTime())) return String(d ?? '');
   const now = new Date();
-  const diff = Math.floor((now.getTime() - d.getTime()) / 86400000);
+  const diff = Math.floor((now.getTime() - date.getTime()) / 86400000);
   if (diff === 0) return 'امروز';
   if (diff === 1) return 'دیروز';
-  return faDate(d);
+  return faDate(date);
 }
 
 export function orderCode(n: number): string {

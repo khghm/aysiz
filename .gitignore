@@ -3,3 +3,6 @@ node_modules/
 dist/
 build/
 *.log
+server/node_modules/
+server/data/
+.env

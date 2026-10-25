@@ -43,7 +43,7 @@ export const seedSettings = {
 export const seedAffiliates = [
   { id: 'af1', name: 'سارا موسوی', username: 'sara_m', mobile: '09121234567', refCode: 'SARA20', level: 'gold', clicks: 1250, orders: 45, sales: 12500000, commission: 1250000, active: true, flagged: false },
   { id: 'af2', name: 'امیر جعفری', username: 'amir_j', mobile: '09131234567', refCode: 'AMIR15', level: 'silver', clicks: 800, orders: 22, sales: 6800000, commission: 680000, active: true, flagged: false },
-  { id: 'af3', name: 'ناشناس', username: 'unknown_x', mobile: '09141234567', refCode: 'UNK50', level: 'platinum', clicks: 3500, orders: 2, sales: 400000, commission: 40000, active: true, flagged: true },
+  { id: 'af3', name: 'ناشناس', username: 'unknown_x', mobile: '09141234567', refCode: 'UNK50', level: 'platinum', clicks: 3500, orders: 2, sales: 400000, commission: 40000, active: true, flagged: false },
 ];
 
 export const seedPayouts = [
@@ -94,9 +94,9 @@ export const seedRoles = [
 ];
 
 export const seedCampaigns = [
-  { id: 'cmp1', name: 'تخفیف پلکانی زمستانه', type: 'tiered', config: { tiers: [{ min: 1000000, discount: 12 }, { min: 2000000, discount: 18 }] }, uses: 45, active: true },
-  { id: 'cmp2', name: 'یکی بخر یکی ببر', type: 'bogo', config: {}, uses: 12, active: true },
-  { id: 'cmp3', name: 'ارسال رایگان عید', type: 'freeship', config: {}, uses: 89, active: false },
+  { id: 'cmp1', name: 'تخفیف پلکانی زمستانه', type: 'tiered', config: { tiers: [{ min: 1000000, discount: 12 }, { min: 2000000, discount: 18 }] }, uses: 0, active: false },
+  { id: 'cmp2', name: 'یکی بخر یکی ببر', type: 'bogo', config: {}, uses: 0, active: false },
+  { id: 'cmp3', name: 'ارسال رایگان عید', type: 'freeship', config: {}, uses: 0, active: false },
 ];
 
 export const seedInvoices = [
@@ -148,9 +148,9 @@ export const seedPosts = [
 ];
 
 export const seedAutomations = [
-  { id: 'aut1', name: 'خوش‌آمدگویی مشتری جدید', event: 'register', channel: 'sms', template: 'سلام {name}! به تای سیز خوش آمدید.', active: true, sent: 234 },
-  { id: 'aut2', name: 'یادآوری سبد رها شده', event: 'abandoned_cart', channel: 'sms', template: 'سبد خرید شما منتظر است! کد تخفیف: CART10', active: true, sent: 89 },
-  { id: 'aut3', name: 'تبریک تولد', event: 'birthday', channel: 'sms', template: 'تولدتان مبارک! هدیه ویژه تای سیز برای شما', active: false, sent: 45 },
+  { id: 'aut1', name: 'خوش‌آمدگویی مشتری جدید', event: 'register', channel: 'sms', template: 'سلام {name}! به تای سیز خوش آمدید.', active: false, sent: 0 },
+  { id: 'aut2', name: 'یادآوری سبد رها شده', event: 'abandoned_cart', channel: 'sms', template: 'سبد خرید شما منتظر است! کد تخفیف: CART10', active: false, sent: 0 },
+  { id: 'aut3', name: 'تبریک تولد', event: 'birthday', channel: 'sms', template: 'تولدتان مبارک! هدیه ویژه تای سیز برای شما', active: false, sent: 0 },
 ];
 
 export const seedLoyalty = {
