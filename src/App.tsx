@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
+import { queryClient } from './services/queryClient';
 import { ShopProvider, useShop } from './context/ShopContext';
 import { AdminProvider, useAdmin } from './context/AdminContext';
 import { Product, Category, categories, brands } from './data/products';
@@ -1193,17 +1195,11 @@ function AdminHome() {
 
 /* ─────────── Admin Orders ─────────── */
 function AdminOrders() {
-  const { darkMode, log } = useAdmin();
+  const { darkMode, log, orders, setOrders } = useAdmin();
   const { addToast } = useShop();
-  const [orders, setOrders] = useState<any[]>([]);
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<any>(null);
-  useEffect(() => {
-    api.orders.list().then((r: any) => setOrders(r.items || r || [])).catch((error) => {
-      addToast('danger', `بارگذاری سفارش‌ها ناموفق بود: ${error.message}`);
-    });
-  }, [addToast]);
   const filtered = orders.filter((o: any) => {
     if (filter !== 'all' && o.status !== filter) return false;
     if (search && !String(o.code||'').includes(search) && !String(o.customer||o.name||'').includes(search) && !String(o.mobile||'').includes(search)) return false;
@@ -1300,14 +1296,26 @@ function AdminOrders() {
 
 /* ─────────── Admin Products ─────────── */
 function AdminProducts() {
-  const [products, setProducts] = useState<any[]>([]);
+  const { darkMode, log, isAdmin } = useAdmin();
+  const queryClient = useQueryClient();
+  const productsQuery = useQuery({
+    queryKey: ['admin', 'products', 'all'],
+    queryFn: () => api.catalog.products('?limit=1000&includeInactive=true'),
+    enabled: isAdmin,
+    staleTime: 30_000,
+  });
+  const products = productsQuery.data?.items ?? [];
+  const setProducts = useCallback((items: any[]) => {
+    queryClient.setQueryData(['admin', 'products', 'all'], (current: any) => ({
+      ...(current || {}),
+      items,
+      total: items.length,
+    }));
+  }, [queryClient]);
   const { setView, setSelectedProduct, setProducts: setShopProducts, addToast } = useShop();
   useEffect(() => {
-    api.catalog.products('?limit=1000&includeInactive=true')
-      .then((r: any) => setProducts(r.items || []))
-      .catch((error) => addToast('danger', `بارگذاری محصولات ناموفق بود: ${error.message}`));
-  }, [addToast]);
-  const { darkMode, log } = useAdmin();
+    if (productsQuery.error) addToast('danger', `بارگذاری محصولات ناموفق بود: ${productsQuery.error.message}`);
+  }, [addToast, productsQuery.error]);
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState('');
   const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'out' | 'ok'>('all');
@@ -2874,22 +2882,18 @@ function AdminFinance() {
 }
 
 function AdminCustomers() {
-  const { darkMode, log, adminIdentity } = useAdmin();
+  const { darkMode, log, adminIdentity, isAdmin, orders } = useAdmin();
   const { addToast } = useShop();
-  const [orders, setOrders] = useState<any[]>([]);
-  const [registeredCustomers, setRegisteredCustomers] = useState<any[]>([]);
+  const customersQuery = useQuery({
+    queryKey: ['admin', 'customers'],
+    queryFn: () => api.customers.list(),
+    enabled: isAdmin,
+    staleTime: 30_000,
+  });
+  const registeredCustomers = customersQuery.data?.items ?? [];
   useEffect(() => {
-    api.customers.list().then(({ items }) => setRegisteredCustomers(items)).catch((error) => {
-      addToast('danger', `بارگذاری حساب‌های مشتریان ناموفق بود: ${error.message}`);
-    });
-    if (!adminIdentity?.sections.includes('orders')) {
-      setOrders([]);
-      return;
-    }
-    api.orders.list().then(({ items }) => setOrders(items)).catch((error) => {
-      addToast('danger', `بارگذاری سفارش‌های مشتریان ناموفق بود: ${error.message}`);
-    });
-  }, [addToast, adminIdentity]);
+    if (customersQuery.error) addToast('danger', `بارگذاری حساب‌های مشتریان ناموفق بود: ${customersQuery.error.message}`);
+  }, [addToast, customersQuery.error]);
   const orderCustomers = aggregateCustomers(orders);
   const orderCustomersByMobile = new Map(orderCustomers.map((customer) => [customer.mobile, customer]));
   const registeredPhones = new Set(registeredCustomers.map((customer) => customer.phone));
@@ -3130,14 +3134,23 @@ function AdminCustomers() {
 }
 
 function AdminReviews() {
-  const { darkMode, log } = useAdmin();
+  const { darkMode, log, isAdmin } = useAdmin();
   const { products, addToast } = useShop();
-  const [reviews, setReviews] = useState<any[]>([]);
+  const queryClient = useQueryClient();
+  const reviewsQuery = useQuery({
+    queryKey: ['admin', 'reviews'],
+    queryFn: () => api.catalog.reviews('', ''),
+    enabled: isAdmin,
+    staleTime: 30_000,
+  });
+  const reviews = reviewsQuery.data?.items ?? [];
+  const setReviews = useCallback((items: any[]) => {
+    queryClient.setQueryData(['admin', 'reviews'], { items });
+    void queryClient.invalidateQueries({ queryKey: ['catalog', 'reviews'] });
+  }, [queryClient]);
   useEffect(() => {
-    api.catalog.reviews('', '').then((r: any) => setReviews(r.items || [])).catch((error) => {
-      addToast('danger', `بارگذاری دیدگاه‌ها ناموفق بود: ${error.message}`);
-    });
-  }, [addToast]);
+    if (reviewsQuery.error) addToast('danger', `بارگذاری دیدگاه‌ها ناموفق بود: ${reviewsQuery.error.message}`);
+  }, [addToast, reviewsQuery.error]);
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
   const [ratingFilter, setRatingFilter] = useState(0);
   const [search, setSearch] = useState('');
@@ -3364,14 +3377,26 @@ function AdminReviews() {
 }
 
 function AdminDiscounts() {
-  const [discountCodes, setDiscountCodes] = useState<any[]>([]);
+  const { darkMode, log, isAdmin } = useAdmin();
+  const queryClient = useQueryClient();
+  const discountsQuery = useQuery({
+    queryKey: ['admin', 'discounts'],
+    queryFn: () => api.catalog.discounts(),
+    enabled: isAdmin,
+    staleTime: 30_000,
+  });
+  const discountCodes = discountsQuery.data?.items ?? [];
   const { setDiscountCodes: setShopDiscountCodes, addToast } = useShop();
+  const setDiscountCodes = useCallback((items: any[]) => {
+    queryClient.setQueryData(['admin', 'discounts'], { items });
+    setShopDiscountCodes(items);
+  }, [queryClient, setShopDiscountCodes]);
   useEffect(() => {
-    api.catalog.discounts()
-      .then((r: any) => { setDiscountCodes(r.items || []); setShopDiscountCodes(r.items || []); })
-      .catch((error) => addToast('danger', `بارگذاری کدهای تخفیف ناموفق بود: ${error.message}`));
-  }, [addToast, setShopDiscountCodes]);
-  const { darkMode, log } = useAdmin();
+    if (discountsQuery.data) setShopDiscountCodes(discountsQuery.data.items);
+  }, [discountsQuery.data, setShopDiscountCodes]);
+  useEffect(() => {
+    if (discountsQuery.error) addToast('danger', `بارگذاری کدهای تخفیف ناموفق بود: ${discountsQuery.error.message}`);
+  }, [addToast, discountsQuery.error]);
   const [showForm, setShowForm] = useState(false);
   const [editingCode, setEditingCode] = useState<any>(null);
   const [search, setSearch] = useState('');
@@ -3592,16 +3617,28 @@ function AdminDiscounts() {
 
 /* Remaining admin sections - simplified but functional */
 function AdminGrowth() {
-  const { campaigns, automations, loyalty, setLoyalty, darkMode, log } = useAdmin();
-  const { discountCodes, setDiscountCodes, addToast } = useShop();
+  const { campaigns, automations, loyalty, setLoyalty, darkMode, log, isAdmin } = useAdmin();
+  const { discountCodes, setDiscountCodes: setShopDiscountCodes, addToast } = useShop();
+  const queryClient = useQueryClient();
+  const discountsQuery = useQuery({
+    queryKey: ['admin', 'discounts'],
+    queryFn: () => api.catalog.discounts(),
+    enabled: isAdmin,
+    staleTime: 30_000,
+  });
+  const setDiscountCodes = useCallback((items: any[]) => {
+    queryClient.setQueryData(['admin', 'discounts'], { items });
+    setShopDiscountCodes(items);
+  }, [queryClient, setShopDiscountCodes]);
   const [tab, setTab] = useState<'campaigns' | 'codes' | 'automation' | 'loyalty' | 'ab'>('campaigns');
   const [showCodeForm, setShowCodeForm] = useState(false);
   const [newCode, setNewCode] = useState({ code: '', type: 'percent', value: 10, maxUses: 100, expiresAt: '' });
   useEffect(() => {
-    api.catalog.discounts().then((result: any) => setDiscountCodes(result.items || [])).catch((error) => {
-      addToast('danger', `بارگذاری کدهای تخفیف ناموفق بود: ${error.message}`);
-    });
-  }, [addToast, setDiscountCodes]);
+    if (discountsQuery.data) setShopDiscountCodes(discountsQuery.data.items);
+  }, [discountsQuery.data, setShopDiscountCodes]);
+  useEffect(() => {
+    if (discountsQuery.error) addToast('danger', `بارگذاری کدهای تخفیف ناموفق بود: ${discountsQuery.error.message}`);
+  }, [addToast, discountsQuery.error]);
 
   return (
     <div className="space-y-4">
@@ -5981,9 +6018,24 @@ function CustomerLogin() {
 /* ─────────── Customer Account ─────────── */
 function CustomerAccount() {
   const { customer, setView, logoutCustomer, money, addToast } = useShop();
-  const [orders, setOrders] = useState<any[]>([]);
-  const [rmas, setRmas] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const customerOrdersKey = ['customer', customer?.id, 'orders'];
+  const customerRmasKey = ['customer', customer?.id, 'rmas'];
+  const ordersQuery = useQuery({
+    queryKey: customerOrdersKey,
+    queryFn: () => api.orders.mine(),
+    enabled: Boolean(customer),
+    staleTime: 30_000,
+  });
+  const rmasQuery = useQuery({
+    queryKey: customerRmasKey,
+    queryFn: () => api.support.rmas.mine(),
+    enabled: Boolean(customer),
+    staleTime: 30_000,
+  });
+  const orders = ordersQuery.data?.items ?? [];
+  const rmas = rmasQuery.data?.items ?? [];
+  const loading = Boolean(customer) && (ordersQuery.isLoading || rmasQuery.isLoading);
   const [name, setName] = useState(customer?.name || '');
   const [saving, setSaving] = useState(false);
   const [returnOrderId, setReturnOrderId] = useState('');
@@ -5993,28 +6045,9 @@ function CustomerAccount() {
   const [submittingReturn, setSubmittingReturn] = useState(false);
 
   useEffect(() => {
-    if (!customer) {
-      setOrders([]);
-      setRmas([]);
-      setLoading(false);
-      return;
-    }
-    let active = true;
-    setLoading(true);
-    Promise.all([api.orders.mine(), api.support.rmas.mine()])
-      .then(([orderResult, rmaResult]) => {
-        if (!active) return;
-        setOrders(orderResult.items);
-        setRmas(rmaResult.items);
-      })
-      .catch((error: any) => {
-        if (active) addToast('danger', `بارگذاری سفارش‌ها یا درخواست‌های مرجوعی ناموفق بود: ${error.message}`);
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => { active = false; };
-  }, [addToast, customer?.id]);
+    const error = ordersQuery.error || rmasQuery.error;
+    if (error) addToast('danger', `بارگذاری سفارش‌ها یا درخواست‌های مرجوعی ناموفق بود: ${error.message}`);
+  }, [addToast, ordersQuery.error, rmasQuery.error]);
 
   useEffect(() => {
     if (!customer) setView('login');
@@ -6052,7 +6085,9 @@ function CustomerAccount() {
         quantity: returnQuantity,
         reason: returnReason.trim(),
       });
-      setRmas((current) => [rma, ...current]);
+      queryClient.setQueryData<{ items: any[] }>(customerRmasKey, (current) => ({
+        items: [rma, ...(current?.items ?? [])],
+      }));
       setReturnOrderId('');
       setReturnProductId('');
       setReturnQuantity(1);
@@ -6229,11 +6264,13 @@ function PaymentResult() {
 
 export default function App() {
   return (
-    <ShopProvider>
-      <AdminProvider>
-        <AppContent />
-      </AdminProvider>
-    </ShopProvider>
+    <QueryClientProvider client={queryClient}>
+      <ShopProvider>
+        <AdminProvider>
+          <AppContent />
+        </AdminProvider>
+      </ShopProvider>
+    </QueryClientProvider>
   );
 }
 

@@ -1,10 +1,12 @@
-import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as api from '../services/api';
+import { useAdminStore } from '../stores/adminStore';
 
 const load = <T,>(key: string, fallback: T): T => {
   try {
     const value = localStorage.getItem(key);
-    return value ? JSON.parse(value) : fallback;
+    return value ? JSON.parse(value) as T : fallback;
   } catch {
     return fallback;
   }
@@ -58,238 +60,301 @@ async function syncCollection(apiCollection: CollectionApi, previous: any[], nex
   await Promise.all(requests);
 }
 
-function useBackendCollection(apiCollection: CollectionApi, enabled: boolean): [any[], React.Dispatch<React.SetStateAction<any[]>>] {
-  const [items, setItems] = useState<any[]>([]);
-  const itemsRef = useRef(items);
-  itemsRef.current = items;
+type CollectionQueryData = { items: any[] };
+type CollectionSetter = React.Dispatch<React.SetStateAction<any[]>>;
 
-  useEffect(() => {
-    if (!enabled) return;
-    let active = true;
-    apiCollection.list().then((result) => {
-      if (!active) return;
-      itemsRef.current = result.items;
-      setItems(result.items);
-    }).catch((error) => {
-      reportAdminError('بارگذاری اطلاعات پنل ناموفق بود', error);
-    });
-    return () => { active = false; };
-  }, [apiCollection, enabled]);
+function useBackendCollection(
+  apiCollection: CollectionApi,
+  cacheKey: readonly unknown[],
+  enabled: boolean,
+): [any[], CollectionSetter] {
+  const queryClient = useQueryClient();
+  const query = useQuery({
+    queryKey: cacheKey,
+    queryFn: apiCollection.list,
+    enabled,
+    staleTime: 30_000,
+  });
+  const mutation = useMutation({
+    mutationFn: ({ previous, next }: { previous: any[]; next: any[] }) =>
+      syncCollection(apiCollection, previous, next),
+    onMutate: async ({ next }) => {
+      await queryClient.cancelQueries({ queryKey: cacheKey });
+      const previous = queryClient.getQueryData<CollectionQueryData>(cacheKey);
+      queryClient.setQueryData<CollectionQueryData>(cacheKey, { items: next });
+      return { previous };
+    },
+    onError: (error, _variables, context) => {
+      if (context?.previous) queryClient.setQueryData(cacheKey, context.previous);
+      reportAdminError('ذخیره تغییرات پنل ناموفق بود', error);
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: cacheKey }),
+  });
 
-  const setBackendItems: React.Dispatch<React.SetStateAction<any[]>> = (value) => {
-    const previous = itemsRef.current;
+  const setItems: CollectionSetter = useCallback((value) => {
+    const previous = queryClient.getQueryData<CollectionQueryData>(cacheKey)?.items
+      ?? query.data?.items
+      ?? [];
     const updated = typeof value === 'function' ? value(previous) : value;
     const next = updated.map((item) => item.id ? item : { ...item, id: crypto.randomUUID() });
-    itemsRef.current = next;
-    setItems(next);
-
-    if (enabled) {
-      syncCollection(apiCollection, previous, next).catch((error) => {
-        reportAdminError('ذخیره تغییرات پنل ناموفق بود', error);
-        apiCollection.list().then((result) => {
-          itemsRef.current = result.items;
-          setItems(result.items);
-        }).catch((reloadError) => {
-          reportAdminError('بازیابی وضعیت ذخیره‌شده ناموفق بود', reloadError);
-          if (itemsRef.current === next) {
-            itemsRef.current = previous;
-            setItems(previous);
-          }
-        });
-      });
-    }
-  };
-
-  return [items, setBackendItems];
-}
-
-function useBackendValue<T>(initial: T, enabled: boolean, read: () => Promise<T>, write: (value: T) => Promise<any>): [T, React.Dispatch<React.SetStateAction<T>>] {
-  const [value, setValue] = useState(initial);
-  const valueRef = useRef(value);
-  valueRef.current = value;
+    if (enabled) mutation.mutate({ previous, next });
+    else queryClient.setQueryData<CollectionQueryData>(cacheKey, { items: next });
+  }, [cacheKey, enabled, mutation.mutate, query.data?.items, queryClient]);
 
   useEffect(() => {
-    if (!enabled) return;
-    let active = true;
-    read().then((result) => {
-      if (active && result !== null && result !== undefined) setValue(result);
-    }).catch((error) => {
-      reportAdminError('بارگذاری تنظیمات پنل ناموفق بود', error);
-    });
-    return () => { active = false; };
-  }, [enabled, read]);
+    if (query.error) reportAdminError('بارگذاری اطلاعات پنل ناموفق بود', query.error);
+  }, [query.error]);
 
-  const setBackendValue: React.Dispatch<React.SetStateAction<T>> = (nextValue) => {
-    const previous = valueRef.current;
+  return [query.data?.items ?? [], setItems];
+}
+
+function useBackendValue<T>(
+  initial: T,
+  cacheKey: readonly unknown[],
+  enabled: boolean,
+  read: () => Promise<T>,
+  write: (value: T) => Promise<any>,
+): [T, React.Dispatch<React.SetStateAction<T>>] {
+  const queryClient = useQueryClient();
+  const query = useQuery({
+    queryKey: cacheKey,
+    queryFn: read,
+    enabled,
+    staleTime: 30_000,
+  });
+  const mutation = useMutation({
+    mutationFn: write,
+    onMutate: async (next) => {
+      await queryClient.cancelQueries({ queryKey: cacheKey });
+      const previous = queryClient.getQueryData<T>(cacheKey);
+      queryClient.setQueryData(cacheKey, next);
+      return { previous };
+    },
+    onError: (error, _next, context) => {
+      if (context?.previous !== undefined) queryClient.setQueryData(cacheKey, context.previous);
+      reportAdminError('ذخیره تنظیمات پنل ناموفق بود', error);
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: cacheKey }),
+  });
+
+  const setValue: React.Dispatch<React.SetStateAction<T>> = useCallback((nextValue) => {
+    const previous = queryClient.getQueryData<T>(cacheKey) ?? query.data ?? initial;
     const next = typeof nextValue === 'function'
       ? (nextValue as (previous: T) => T)(previous)
       : nextValue;
-    valueRef.current = next;
-    setValue(next);
-    if (enabled) {
-      write(next).catch((error) => {
-        reportAdminError('ذخیره تنظیمات پنل ناموفق بود', error);
-        if (valueRef.current === next) {
-          valueRef.current = previous;
-          setValue(previous);
-        }
-      });
-    }
-  };
+    if (enabled) mutation.mutate(next);
+    else queryClient.setQueryData(cacheKey, next);
+  }, [cacheKey, enabled, initial, mutation.mutate, query.data, queryClient]);
 
-  return [value, setBackendValue];
+  useEffect(() => {
+    if (query.error) reportAdminError('بارگذاری تنظیمات پنل ناموفق بود', query.error);
+  }, [query.error]);
+
+  return [query.data ?? initial, setValue];
 }
 
-interface AdminContextType {
-  isAdmin: boolean; setIsAdmin: (v: boolean) => void;
+export interface AdminContextType {
+  isAdmin: boolean; setIsAdmin: (value: boolean) => void;
   darkMode: boolean; toggleDark: () => void;
   currentRole: string;
   adminIdentity: { id: string; username: string; name: string; roleId: string; roleName: string; sections: string[] } | null;
-  roles: any[]; setRoles: React.Dispatch<React.SetStateAction<any[]>>;
-  orders: any[]; setOrders: React.Dispatch<React.SetStateAction<any[]>>;
-  tickets: any[]; setTickets: React.Dispatch<React.SetStateAction<any[]>>;
-  rmas: any[]; setRmas: React.Dispatch<React.SetStateAction<any[]>>;
-  carriers: any[]; setCarriers: React.Dispatch<React.SetStateAction<any[]>>;
-  vendors: any[]; setVendors: React.Dispatch<React.SetStateAction<any[]>>;
-  tasks: any[]; setTasks: React.Dispatch<React.SetStateAction<any[]>>;
-  campaigns: any[]; setCampaigns: React.Dispatch<React.SetStateAction<any[]>>;
-  invoices: any[]; setInvoices: React.Dispatch<React.SetStateAction<any[]>>;
-  expenses: any[]; setExpenses: React.Dispatch<React.SetStateAction<any[]>>;
-  bankTx: any[]; setBankTx: React.Dispatch<React.SetStateAction<any[]>>;
-  abandoned: any[]; setAbandoned: React.Dispatch<React.SetStateAction<any[]>>;
-  searchTerms: any[]; setSearchTerms: React.Dispatch<React.SetStateAction<any[]>>;
-  pages: any[]; setPages: React.Dispatch<React.SetStateAction<any[]>>;
-  banners: any[]; setBanners: React.Dispatch<React.SetStateAction<any[]>>;
-  posts: any[]; setPosts: React.Dispatch<React.SetStateAction<any[]>>;
-  automations: any[]; setAutomations: React.Dispatch<React.SetStateAction<any[]>>;
+  roles: any[]; setRoles: CollectionSetter;
+  orders: any[]; setOrders: CollectionSetter;
+  tickets: any[]; setTickets: CollectionSetter;
+  rmas: any[]; setRmas: CollectionSetter;
+  carriers: any[]; setCarriers: CollectionSetter;
+  vendors: any[]; setVendors: CollectionSetter;
+  tasks: any[]; setTasks: CollectionSetter;
+  campaigns: any[]; setCampaigns: CollectionSetter;
+  invoices: any[]; setInvoices: CollectionSetter;
+  expenses: any[]; setExpenses: CollectionSetter;
+  bankTx: any[]; setBankTx: CollectionSetter;
+  abandoned: any[]; setAbandoned: CollectionSetter;
+  searchTerms: any[]; setSearchTerms: CollectionSetter;
+  pages: any[]; setPages: CollectionSetter;
+  banners: any[]; setBanners: CollectionSetter;
+  posts: any[]; setPosts: CollectionSetter;
+  automations: any[]; setAutomations: CollectionSetter;
   loyalty: any; setLoyalty: React.Dispatch<React.SetStateAction<any>>;
-  integrations: any[]; setIntegrations: React.Dispatch<React.SetStateAction<any[]>>;
-  audit: any[]; setAudit: React.Dispatch<React.SetStateAction<any[]>>;
-  surveys: any[]; setSurveys: React.Dispatch<React.SetStateAction<any[]>>;
-  assets: any[]; setAssets: React.Dispatch<React.SetStateAction<any[]>>;
-  loginHistory: any[]; setLoginHistory: React.Dispatch<React.SetStateAction<any[]>>;
-  errorLog: any[]; setErrorLog: React.Dispatch<React.SetStateAction<any[]>>;
-  affiliates: any[]; setAffiliates: React.Dispatch<React.SetStateAction<any[]>>;
-  payouts: any[]; setPayouts: React.Dispatch<React.SetStateAction<any[]>>;
+  integrations: any[]; setIntegrations: CollectionSetter;
+  audit: any[]; setAudit: CollectionSetter;
+  surveys: any[]; setSurveys: CollectionSetter;
+  assets: any[]; setAssets: CollectionSetter;
+  loginHistory: any[]; setLoginHistory: CollectionSetter;
+  errorLog: any[]; setErrorLog: CollectionSetter;
+  affiliates: any[]; setAffiliates: CollectionSetter;
+  payouts: any[]; setPayouts: CollectionSetter;
   affConf: any; setAffConf: React.Dispatch<React.SetStateAction<any>>;
   log: (action: string, target: string, severity?: string) => void;
-  adminSection: string; setAdminSection: (s: string) => void;
+  adminSection: string; setAdminSection: (section: string) => void;
 }
 
 const AdminContext = createContext<AdminContextType>({} as AdminContextType);
 export const useAdmin = () => useContext(AdminContext);
 
+const queryKeys = {
+  identity: ['admin', 'identity'] as const,
+  orders: ['admin', 'orders'] as const,
+  audit: ['admin', 'audit'] as const,
+};
+
 export function AdminProvider({ children }: { children: React.ReactNode }) {
-  const [isAdmin, setIsAdmin] = useState(() => load('tasis-admin', false) && Boolean(api.getToken()));
-  const [darkMode, setDarkMode] = useState(() => load('tasis-dark', false));
-  const [currentRole, setCurrentRole] = useState('');
-  const [adminIdentity, setAdminIdentity] = useState<AdminContextType['adminIdentity']>(null);
-  const [adminSection, setAdminSectionState] = useState(() => load('tasis-admin-section', 'home'));
-  const [orders, setOrders] = useState<any[]>([]);
+  const queryClient = useQueryClient();
+  const isAdmin = useAdminStore((state) => state.isAdmin);
+  const setIsAdmin = useAdminStore((state) => state.setIsAdmin);
+  const darkMode = useAdminStore((state) => state.darkMode);
+  const toggleDark = useAdminStore((state) => state.toggleDark);
+  const currentRole = useAdminStore((state) => state.currentRole);
+  const adminIdentity = useAdminStore((state) => state.adminIdentity);
+  const setAdminIdentity = useAdminStore((state) => state.setAdminIdentity);
+  const setCurrentRole = useAdminStore((state) => state.setCurrentRole);
+  const adminSection = useAdminStore((state) => state.adminSection);
+  const setSavedAdminSection = useAdminStore((state) => state.setAdminSection);
   const hasSection = (section: string) => Boolean(adminIdentity?.sections.includes(section));
-  const [roles, setRoles] = useBackendCollection(api.admin.roles, isAdmin && hasSection('system'));
-  const [tickets, setTickets] = useBackendCollection(api.support.tickets, isAdmin && hasSection('support'));
-  const [rmas, setRmas] = useBackendCollection(api.support.rmas, isAdmin && hasSection('returns'));
-  const [carriers, setCarriers] = useBackendCollection(api.logistics.carriers, isAdmin && hasSection('logistics'));
-  const [vendors, setVendors] = useBackendCollection(api.logistics.vendors, isAdmin && hasSection('vendors'));
-  const [tasks, setTasks] = useBackendCollection(api.tasks, isAdmin && hasSection('tasks'));
-  const [campaigns, setCampaigns] = useBackendCollection(api.marketing.campaigns, isAdmin && hasSection('growth'));
-  const [invoices, setInvoices] = useBackendCollection(api.finance.invoices, isAdmin && hasSection('finance'));
-  const [expenses, setExpenses] = useBackendCollection(api.finance.expenses, isAdmin && hasSection('finance'));
-  const [bankTx, setBankTx] = useBackendCollection(api.finance.bankTx, isAdmin && hasSection('finance'));
-  const [abandoned, setAbandoned] = useBackendCollection(api.analytics.abandoned, isAdmin && hasSection('insights'));
-  const [searchTerms, setSearchTerms] = useBackendCollection(api.analytics.searchTerms, isAdmin && hasSection('insights'));
-  const [pages, setPages] = useBackendCollection(api.content.pages, isAdmin && hasSection('content'));
-  const [banners, setBanners] = useBackendCollection(api.content.banners, isAdmin && hasSection('content'));
-  const [posts, setPosts] = useBackendCollection(api.content.posts, isAdmin && hasSection('content'));
-  const [automations, setAutomations] = useBackendCollection(api.marketing.automations, isAdmin && hasSection('growth'));
-  const [loyalty, setLoyalty] = useBackendValue<any>(null, isAdmin && hasSection('growth'), api.admin.loyalty.get, api.admin.loyalty.update);
-  const [integrations, setIntegrations] = useBackendCollection(api.admin.integrations, isAdmin && hasSection('system'));
-  const [audit, setAudit] = useState<any[]>([]);
-  const [surveys, setSurveys] = useBackendCollection(api.analytics.surveys, isAdmin && hasSection('insights'));
-  const [assets, setAssets] = useBackendCollection(api.analytics.assets, isAdmin && hasSection('system'));
-  const [loginHistory, setLoginHistory] = useBackendCollection(api.analytics.loginHistory, isAdmin && hasSection('system'));
-  const [errorLog, setErrorLog] = useBackendCollection(api.analytics.errorLog, isAdmin && hasSection('system'));
-  const [affiliates, setAffiliates] = useBackendCollection(api.affiliate.affiliates, isAdmin && hasSection('affiliates'));
-  const [payouts, setPayouts] = useBackendCollection(api.affiliate.payouts, isAdmin && hasSection('affiliates'));
-  const [affConf, setAffConf] = useBackendValue<any>(null, isAdmin && hasSection('affiliates'), api.admin.affConfig.get, api.admin.affConfig.update);
+
+  const [roles, setRoles] = useBackendCollection(api.admin.roles, ['admin', 'roles'], isAdmin && hasSection('system'));
+  const [tickets, setTickets] = useBackendCollection(api.support.tickets, ['admin', 'tickets'], isAdmin && hasSection('support'));
+  const [rmas, setRmas] = useBackendCollection(api.support.rmas, ['admin', 'rmas'], isAdmin && hasSection('returns'));
+  const [carriers, setCarriers] = useBackendCollection(api.logistics.carriers, ['admin', 'carriers'], isAdmin && hasSection('logistics'));
+  const [vendors, setVendors] = useBackendCollection(api.logistics.vendors, ['admin', 'vendors'], isAdmin && hasSection('vendors'));
+  const [tasks, setTasks] = useBackendCollection(api.tasks, ['admin', 'tasks'], isAdmin && hasSection('tasks'));
+  const [campaigns, setCampaigns] = useBackendCollection(api.marketing.campaigns, ['admin', 'campaigns'], isAdmin && hasSection('growth'));
+  const [invoices, setInvoices] = useBackendCollection(api.finance.invoices, ['admin', 'invoices'], isAdmin && hasSection('finance'));
+  const [expenses, setExpenses] = useBackendCollection(api.finance.expenses, ['admin', 'expenses'], isAdmin && hasSection('finance'));
+  const [bankTx, setBankTx] = useBackendCollection(api.finance.bankTx, ['admin', 'bank-transactions'], isAdmin && hasSection('finance'));
+  const [abandoned, setAbandoned] = useBackendCollection(api.analytics.abandoned, ['admin', 'abandoned'], isAdmin && hasSection('insights'));
+  const [searchTerms, setSearchTerms] = useBackendCollection(api.analytics.searchTerms, ['admin', 'search-terms'], isAdmin && hasSection('insights'));
+  const [pages, setPages] = useBackendCollection(api.content.pages, ['admin', 'pages'], isAdmin && hasSection('content'));
+  const [banners, setBanners] = useBackendCollection(api.content.banners, ['admin', 'banners'], isAdmin && hasSection('content'));
+  const [posts, setPosts] = useBackendCollection(api.content.posts, ['admin', 'posts'], isAdmin && hasSection('content'));
+  const [automations, setAutomations] = useBackendCollection(api.marketing.automations, ['admin', 'automations'], isAdmin && hasSection('growth'));
+  const [loyalty, setLoyalty] = useBackendValue<any>(null, ['admin', 'loyalty'], isAdmin && hasSection('growth'), api.admin.loyalty.get, api.admin.loyalty.update);
+  const [integrations, setIntegrations] = useBackendCollection(api.admin.integrations, ['admin', 'integrations'], isAdmin && hasSection('system'));
+  const [surveys, setSurveys] = useBackendCollection(api.analytics.surveys, ['admin', 'surveys'], isAdmin && hasSection('insights'));
+  const [assets, setAssets] = useBackendCollection(api.analytics.assets, ['admin', 'assets'], isAdmin && hasSection('system'));
+  const [loginHistory, setLoginHistory] = useBackendCollection(api.analytics.loginHistory, ['admin', 'login-history'], isAdmin && hasSection('system'));
+  const [errorLog, setErrorLog] = useBackendCollection(api.analytics.errorLog, ['admin', 'error-log'], isAdmin && hasSection('system'));
+  const [affiliates, setAffiliates] = useBackendCollection(api.affiliate.affiliates, ['admin', 'affiliates'], isAdmin && hasSection('affiliates'));
+  const [payouts, setPayouts] = useBackendCollection(api.affiliate.payouts, ['admin', 'payouts'], isAdmin && hasSection('affiliates'));
+  const [affConf, setAffConf] = useBackendValue<any>(null, ['admin', 'affiliate-config'], isAdmin && hasSection('affiliates'), api.admin.affConfig.get, api.admin.affConfig.update);
+
+  const ordersQuery = useQuery({
+    queryKey: queryKeys.orders,
+    queryFn: () => api.orders.list(),
+    enabled: isAdmin && hasSection('orders'),
+    staleTime: 30_000,
+  });
+  const identityQuery = useQuery({
+    queryKey: queryKeys.identity,
+    queryFn: async () => (await api.admin.me()).admin,
+    enabled: isAdmin,
+    retry: false,
+    staleTime: 60_000,
+  });
+  const auditQuery = useQuery({
+    queryKey: queryKeys.audit,
+    queryFn: api.admin.audit.list,
+    enabled: isAdmin && hasSection('system'),
+    staleTime: 30_000,
+  });
+
+  const auditMutation = useMutation({
+    mutationFn: api.admin.audit.create,
+    onMutate: async (entry) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.audit });
+      const previous = queryClient.getQueryData<{ items: any[] }>(queryKeys.audit);
+      queryClient.setQueryData<{ items: any[] }>(queryKeys.audit, {
+        items: [entry, ...(previous?.items ?? [])],
+      });
+      return { previous };
+    },
+    onError: (error, _entry, context) => {
+      if (context?.previous) queryClient.setQueryData(queryKeys.audit, context.previous);
+      reportAdminError('ثبت رویداد مدیریتی ناموفق بود', error);
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.audit }),
+  });
 
   useEffect(() => {
-    if (!isAdmin || !hasSection('orders')) return;
-    api.orders.list().then((result) => setOrders(result.items)).catch((error) => {
-      reportAdminError('بارگذاری سفارش‌های پنل ناموفق بود', error);
-    });
-  }, [isAdmin, adminIdentity]);
+    if (identityQuery.data) {
+      setAdminIdentity(identityQuery.data);
+      setCurrentRole(identityQuery.data.roleName);
+      save('tasis-role', identityQuery.data.roleName);
+    }
+  }, [identityQuery.data, setAdminIdentity, setCurrentRole]);
+
+  useEffect(() => {
+    if (!isAdmin || !identityQuery.error) return;
+    reportAdminError('بارگذاری هویت مدیر ناموفق بود', identityQuery.error);
+    api.setToken(null);
+    setIsAdmin(false);
+  }, [identityQuery.error, isAdmin, setIsAdmin]);
 
   useEffect(() => {
     if (!isAdmin) {
       setAdminIdentity(null);
       setCurrentRole('');
-      return;
+      queryClient.removeQueries({ queryKey: ['admin'] });
     }
-    let active = true;
-    api.admin.me().then(({ admin }) => {
-      if (!active) return;
-      setAdminIdentity(admin);
-      setCurrentRole(admin.roleName);
-      save('tasis-role', admin.roleName);
-    }).catch((error) => {
-      reportAdminError('بارگذاری هویت مدیر ناموفق بود', error);
-      api.setToken(null);
-      setIsAdmin(false);
-    });
-    return () => { active = false; };
-  }, [isAdmin]);
-
-  const toggleDark = () => {
-    const next = !darkMode;
-    setDarkMode(next);
-    save('tasis-dark', next);
-  };
-
-  const setAdminSection = (section: string) => {
-    if (adminIdentity && !adminIdentity.sections.includes(section)) return;
-    setAdminSectionState(section);
-    save('tasis-admin-section', section);
-  };
-
-  const log = (action: string, target: string, severity = 'normal') => {
-    const entry = { id: `log-${Date.now()}-${crypto.randomUUID()}`, action, actor: 'admin', role: currentRole, target, severity, at: new Date().toISOString() };
-    setAudit((current) => [entry, ...current]);
-    api.admin.audit.create(entry).catch((error) => {
-      reportAdminError('ثبت رویداد مدیریتی ناموفق بود', error);
-    });
-  };
+  }, [isAdmin, queryClient, setAdminIdentity, setCurrentRole]);
 
   useEffect(() => {
-    if (isAdmin) save('tasis-admin', true);
-    else localStorage.removeItem('tasis-admin');
-  }, [isAdmin]);
+    if (ordersQuery.error) reportAdminError('بارگذاری سفارش‌های پنل ناموفق بود', ordersQuery.error);
+  }, [ordersQuery.error]);
+
+  useEffect(() => {
+    if (auditQuery.error) reportAdminError('بارگذاری گزارش رویدادها ناموفق بود', auditQuery.error);
+  }, [auditQuery.error]);
 
   useEffect(() => {
     const handleExpiredSession = () => setIsAdmin(false);
     window.addEventListener('auth-expired', handleExpiredSession);
     return () => window.removeEventListener('auth-expired', handleExpiredSession);
-  }, []);
+  }, [setIsAdmin]);
 
-  useEffect(() => {
-    if (!isAdmin || !hasSection('system')) {
-      setAudit([]);
-      return;
-    }
-    api.admin.audit.list().then((result) => setAudit(result.items)).catch((error) => {
-      reportAdminError('بارگذاری گزارش رویدادها ناموفق بود', error);
+  const setOrders: CollectionSetter = useCallback((value) => {
+    queryClient.setQueryData<CollectionQueryData>(queryKeys.orders, (current) => {
+      const previous = current?.items ?? ordersQuery.data?.items ?? [];
+      return { items: typeof value === 'function' ? value(previous) : value };
     });
-  }, [isAdmin, adminIdentity]);
+  }, [ordersQuery.data?.items, queryClient]);
+
+  const setAudit: CollectionSetter = useCallback((value) => {
+    queryClient.setQueryData<CollectionQueryData>(queryKeys.audit, (current) => {
+      const previous = current?.items ?? auditQuery.data?.items ?? [];
+      return { items: typeof value === 'function' ? value(previous) : value };
+    });
+  }, [auditQuery.data?.items, queryClient]);
+
+  const log = useCallback((action: string, target: string, severity = 'normal') => {
+    const entry = {
+      id: `log-${Date.now()}-${crypto.randomUUID()}`,
+      action,
+      actor: 'admin',
+      role: currentRole,
+      target,
+      severity,
+      at: new Date().toISOString(),
+    };
+    auditMutation.mutate(entry);
+  }, [auditMutation.mutate, currentRole]);
+
+  const setAdminSection = useCallback((section: string) => {
+    if (adminIdentity && !adminIdentity.sections.includes(section)) return;
+    setSavedAdminSection(section);
+  }, [adminIdentity, setSavedAdminSection]);
 
   return (
     <AdminContext.Provider value={{
-      isAdmin, setIsAdmin, darkMode, toggleDark, currentRole, adminIdentity, roles, setRoles,
-      orders, setOrders, tickets, setTickets, rmas, setRmas, carriers, setCarriers,
-      vendors, setVendors, tasks, setTasks, campaigns, setCampaigns, invoices, setInvoices,
-      expenses, setExpenses, bankTx, setBankTx, abandoned, setAbandoned, searchTerms, setSearchTerms,
+      isAdmin, setIsAdmin, darkMode, toggleDark, currentRole, adminIdentity,
+      roles, setRoles, orders: ordersQuery.data?.items ?? [], setOrders,
+      tickets, setTickets, rmas, setRmas, carriers, setCarriers,
+      vendors, setVendors, tasks, setTasks, campaigns, setCampaigns,
+      invoices, setInvoices, expenses, setExpenses, bankTx, setBankTx,
+      abandoned, setAbandoned, searchTerms, setSearchTerms,
       pages, setPages, banners, setBanners, posts, setPosts, automations, setAutomations,
-      loyalty, setLoyalty, integrations, setIntegrations, audit, setAudit,
+      loyalty, setLoyalty, integrations, setIntegrations,
+      audit: auditQuery.data?.items ?? [], setAudit,
       surveys, setSurveys, assets, setAssets, loginHistory, setLoginHistory, errorLog, setErrorLog,
       affiliates, setAffiliates, payouts, setPayouts, affConf, setAffConf,
       log, adminSection, setAdminSection,
