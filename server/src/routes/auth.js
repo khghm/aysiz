@@ -3,6 +3,7 @@ import { db } from '../db.js';
 import { config, isKavenegarLive } from '../config.js';
 import { uid, nowIso, normalizePhone, otpCode, sha256, verifyPassword } from '../util.js';
 import { signToken, optionalAuth, requireCustomer } from '../middleware/auth.js';
+import { issueCsrfToken } from '../middleware/csrf.js';
 import { createRateLimit, limitIdentities } from '../middleware/rateLimit.js';
 import { sendOtpSms } from '../services/kavenegar.js';
 
@@ -113,6 +114,9 @@ router.post('/otp/verify', otpVerifyByIp, otpVerifyByPhone, async (req, res) => 
 
   if (!phone || !code) return res.status(400).json({ error: 'invalid_input', message: 'شماره و کد تأیید الزامی است' });
 
+  const blockedCustomer = (await db.prepare('SELECT is_blocked FROM customers WHERE phone = ?').get(phone));
+  if (blockedCustomer?.is_blocked) return res.status(403).json({ error: 'blocked', message: 'حساب شما مسدود شده است' });
+
   const row = (await db.prepare(
     'SELECT * FROM otp_requests WHERE phone = ? AND consumed = 0 ORDER BY created_at DESC LIMIT 1'
   ).get(phone));
@@ -145,9 +149,17 @@ router.post('/otp/verify', otpVerifyByIp, otpVerifyByPhone, async (req, res) => 
   }
 
   const token = signToken({ id: customer.id, phone: customer.phone, name: customer.name }, 'customer');
+  const isProd = process.env.NODE_ENV === 'production';
+  res.cookie('tasis_customer', token, {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  });
+  issueCsrfToken(res);
   res.json({
     ok: true,
-    token,
     customer: { id: customer.id, phone: customer.phone, name: customer.name, ...await customerLoyalty(customer.id) },
   });
 });
@@ -178,11 +190,31 @@ router.post('/admin-login', adminLoginByIp, adminLoginByUsername, async (req, re
   if (!role) return res.status(403).json({ error: 'role_not_assigned', message: 'برای حساب مدیر نقشی تعریف نشده است' });
   const roleData = JSON.parse(role.json);
   const token = signToken({ id: admin.id, username: admin.username, name: admin.name, roleId: admin.role_id }, 'admin');
+  const isProd = process.env.NODE_ENV === 'production';
+  res.cookie('tasis_admin', token, {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  });
+  issueCsrfToken(res);
   res.json({
     ok: true,
-    token,
     admin: { id: admin.id, username: admin.username, name: admin.name, roleId: admin.role_id, roleName: roleData.name },
   });
+});
+
+  // ─── خروج مشتری ─────────────────────────────────────────────────────────────
+router.post('/logout', (req, res) => {
+  res.clearCookie('tasis_customer', { path: '/' });
+  res.json({ ok: true });
+});
+
+// ─── خروج ادمین ─────────────────────────────────────────────────────────────
+router.post('/admin-logout', (req, res) => {
+  res.clearCookie('tasis_admin', { path: '/' });
+  res.json({ ok: true });
 });
 
 export default router;

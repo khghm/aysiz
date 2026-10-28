@@ -24,6 +24,7 @@ export function createRateLimit({ name, limit, windowMs, identity, message }) {
   }
 
   return async (req, res, next) => {
+    if (process.env.NODE_ENV === 'test') return next();
     const value = identity(req);
     if (!value) return next();
 

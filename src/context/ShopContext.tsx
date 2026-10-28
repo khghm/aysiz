@@ -88,7 +88,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
     if (!incomingRef) return;
 
     const state = useShopStore.getState();
-    const visitorId = state.affiliateVisitorId || crypto.randomUUID();
+    const visitorId = state.affiliateVisitorId || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
     if (!state.affiliateVisitorId) state.setAffiliateVisitorId(visitorId);
     api.affiliate.track(incomingRef, visitorId).then((result) => {
       useShopStore.getState().setRefCode(result.refCode);

@@ -96,7 +96,7 @@ function useBackendCollection(
       ?? query.data?.items
       ?? [];
     const updated = typeof value === 'function' ? value(previous) : value;
-    const next = updated.map((item) => item.id ? item : { ...item, id: crypto.randomUUID() });
+    const next = updated.map((item) => item.id ? item : { ...item, id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}` });
     if (enabled) mutation.mutate({ previous, next });
     else queryClient.setQueryData<CollectionQueryData>(cacheKey, { items: next });
   }, [cacheKey, enabled, mutation.mutate, query.data?.items, queryClient]);
@@ -328,7 +328,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
 
   const log = useCallback((action: string, target: string, severity = 'normal') => {
     const entry = {
-      id: `log-${Date.now()}-${crypto.randomUUID()}`,
+      id: `log-${Date.now()}-${Math.random().toString(36).slice(2)}`,
       action,
       actor: 'admin',
       role: currentRole,

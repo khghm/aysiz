@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import path from 'node:path';
 const env = (key, fallback) => {
   const v = process.env[key];
   return v === undefined || v === '' ? fallback : v;
@@ -44,6 +45,7 @@ const corsOrigins = [...new Set([
     .map((origin) => parseOrigin(origin, 'CORS_ORIGINS')),
 ])];
 const trustProxy = env('TRUST_PROXY', 'loopback');
+const imageUploadDir = env('IMAGE_UPLOAD_DIR', isProduction ? '/mnt/storage/images' : path.resolve(process.cwd(), 'data', 'images'));
 
 if (isProduction) {
   const missing = ['JWT_SECRET', 'ADMIN_USERNAME', 'ADMIN_PASSWORD']
@@ -71,6 +73,9 @@ if (isProduction) {
   if (trustProxy === 'true') {
     throw new Error('TRUST_PROXY=true is unsafe; configure the exact trusted proxy address, range, or hop count');
   }
+  if (env('DATABASE_SSL', 'false') !== 'true') {
+    throw new Error('Production requires DATABASE_SSL=true for PostgreSQL connections');
+  }
 }
 
 export const config = {
@@ -83,7 +88,8 @@ export const config = {
   databaseSsl: env('DATABASE_SSL', 'false') === 'true',
   databaseSslVerify: env('DATABASE_SSL_VERIFY', 'true') !== 'false',
   corsOrigins,
-  trustProxy: /^\d+$/.test(trustProxy) ? Number(trustProxy) : trustProxy === 'false' ? false : trustProxy,
+    trustProxy: /^\d+$/.test(trustProxy) ? Number(trustProxy) : trustProxy === 'false' ? false : trustProxy,
+    imageUploadDir,
   jwtSecret: env('JWT_SECRET', 'tasis-dev-secret-change-me'),
   jwtExpiresIn: env('JWT_EXPIRES_IN', '30d'),
   frontendUrl,

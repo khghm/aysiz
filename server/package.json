@@ -8,7 +8,9 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "migrate:sqlite": "node src/migrate-sqlite.js",
-    "seed": "node src/seed.js --force"
+    "seed": "node src/seed.js --force",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "cors": "^2.8.5",
@@ -17,6 +19,12 @@
     "express-async-errors": "^3.1.1",
     "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.2",
-    "pg": "^8.13.1"
+    "multer": "^2.5.0",
+    "pg": "^8.13.1",
+    "sharp": "^0.35.5"
+  },
+  "devDependencies": {
+    "supertest": "^7.3.1",
+    "vitest": "^5.0.5"
   }
 }

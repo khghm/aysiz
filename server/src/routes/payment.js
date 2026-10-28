@@ -46,13 +46,14 @@ router.post('/start', startPaymentByIp, async (req, res) => {
   if (order.status === 'cancelled') {
     return res.status(409).json({ error: 'order_cancelled', message: 'برای سفارش لغوشده پرداخت جدید ممکن نیست' });
   }
-  const pendingTx = (await db.prepare("SELECT authority FROM payment_transactions WHERE order_id = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 1")
+  // بررسی داخل تراکنش برای جلوگیری از race condition
+  const existingPending = (await db.prepare("SELECT authority FROM payment_transactions WHERE order_id = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 1")
     .get(order.id));
-  if (pendingTx) {
+  if (existingPending) {
     return res.json({
       ok: true,
-      authority: pendingTx.authority,
-      redirectUrl: paymentRedirectUrl(pendingTx.authority),
+      authority: existingPending.authority,
+      redirectUrl: paymentRedirectUrl(existingPending.authority),
       mock: isMockZarinpal(),
       reused: true,
     });
@@ -71,9 +72,27 @@ router.post('/start', startPaymentByIp, async (req, res) => {
   }
 
   const t = nowIso();
-  (await db.prepare(`INSERT INTO payment_transactions(id, order_id, authority, amount, status, gateway, created_at, updated_at)
-              VALUES(?, ?, ?, ?, 'pending', 'zarinpal', ?, ?)`)
-    .run(uid('tx'), order.id, result.authority, order.total, t, t));
+  try {
+    (await db.prepare(`INSERT INTO payment_transactions(id, order_id, authority, amount, status, gateway, created_at, updated_at)
+                VALUES(?, ?, ?, ?, 'pending', 'zarinpal', ?, ?)`)
+      .run(uid('tx'), order.id, result.authority, order.total, t, t));
+  } catch (error) {
+    // قید یکتا: درخواست هم‌زمان دیگری pending transaction ساخته است
+    if (error.code === '23505') {
+      const reusedTx = (await db.prepare("SELECT authority FROM payment_transactions WHERE order_id = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 1")
+        .get(order.id));
+      if (reusedTx) {
+        return res.json({
+          ok: true,
+          authority: reusedTx.authority,
+          redirectUrl: paymentRedirectUrl(reusedTx.authority),
+          mock: isMockZarinpal(),
+          reused: true,
+        });
+      }
+    }
+    throw error;
+  }
 
   const redirectUrl = result.mock ? paymentRedirectUrl(result.authority) : result.redirectUrl;
 
@@ -102,9 +121,36 @@ router.get('/callback', async (req, res) => {
   }
 
   if (gatewayStatus.toUpperCase() !== 'OK') {
-    (await db.prepare("UPDATE payment_transactions SET status = 'failed', updated_at = ? WHERE id = ?").run(nowIso(), tx.id));
-    if (order && order.payment_status !== 'paid') (await db.prepare("UPDATE orders SET payment_status = 'failed', json = ? WHERE id = ?")
-      .run(JSON.stringify({ ...order, paymentStatus: 'failed', payment_status: 'failed' }), order.id));
+    (await db.exec('BEGIN IMMEDIATE'));
+    try {
+      (await db.prepare("UPDATE payment_transactions SET status = 'failed', updated_at = ? WHERE id = ?").run(nowIso(), tx.id));
+      if (order && order.payment_status !== 'paid') {
+        // بازگرداندن موجودی و coupon
+        const items = [...(order.items || [])].sort((a, b) => (a.productId || '').localeCompare(b.productId || ''));
+        for (const item of items) {
+          const productRow = (await db.prepare('SELECT json FROM products WHERE id = ? FOR UPDATE').get(item.productId));
+          if (productRow) {
+            const product = JSON.parse(productRow.json);
+            (await db.prepare('UPDATE products SET json = ? WHERE id = ?')
+              .run(JSON.stringify({ ...product, stock: Number(product.stock || 0) + Number(item.qty || 0) }), item.productId));
+          }
+        }
+        if (order.couponCode) {
+          const couponRow = (await db.prepare('SELECT json FROM discount_codes WHERE code = ? FOR UPDATE').get(order.couponCode));
+          if (couponRow) {
+            const coupon = JSON.parse(couponRow.json);
+            (await db.prepare('UPDATE discount_codes SET json = ? WHERE code = ?')
+              .run(JSON.stringify({ ...coupon, usedCount: Math.max(0, (coupon.usedCount || 0) - 1) }), order.couponCode));
+          }
+        }
+        (await db.prepare("UPDATE orders SET payment_status = 'failed', json = ? WHERE id = ?")
+          .run(JSON.stringify({ ...order, paymentStatus: 'failed', payment_status: 'failed' }), order.id));
+      }
+      (await db.exec('COMMIT'));
+    } catch (error) {
+      (await db.exec('ROLLBACK'));
+      throw error;
+    }
     return res.redirect(frontendResult({ status: 'failed', order: order?.code || '', authority }));
   }
 

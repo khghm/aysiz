@@ -106,6 +106,8 @@ export const db = {
       );
       CREATE INDEX IF NOT EXISTS idx_request_rate_limits_window
         ON request_rate_limits(window_started_at);
+      CREATE UNIQUE INDEX IF NOT EXISTS ux_payment_transactions_pending_order
+        ON payment_transactions(order_id) WHERE status = 'pending';
       INSERT INTO schema_migrations(version, applied_at)
       VALUES (8, CURRENT_TIMESTAMP::text)
       ON CONFLICT (version) DO NOTHING;

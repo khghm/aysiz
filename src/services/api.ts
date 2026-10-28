@@ -3,12 +3,12 @@
 // در حالت توسعه، vite درخواست‌های /api را به سرور proxy می‌کند.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const TOKEN_KEY = 'tasis-token';
+const AUTH_FLAG_KEY = 'tasis-auth';
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '');
 
-export const getToken = () => localStorage.getItem(TOKEN_KEY);
+export const getToken = () => localStorage.getItem(AUTH_FLAG_KEY);
 export const setToken = (t: string | null) =>
-  t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY);
+  t ? localStorage.setItem(AUTH_FLAG_KEY, '1') : localStorage.removeItem(AUTH_FLAG_KEY);
 
 export class ApiError extends Error {
   status: number;
@@ -22,12 +22,15 @@ export class ApiError extends Error {
 
 async function request<T = any>(path: string, options: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json', ...(options.headers as any) };
-  const token = getToken();
-  if (token) headers.Authorization = `Bearer ${token}`;
+  // CSRF token from readable cookie
+  const csrfMatch = document.cookie.match(/(?:^|; )tasis_csrf=([^;]+)/);
+  if (csrfMatch && options.method && options.method !== 'GET') {
+    headers['X-CSRF-Token'] = decodeURIComponent(csrfMatch[1]);
+  }
 
   let res: Response;
   try {
-    res = await fetch(`${API_BASE_URL}/api${path}`, { ...options, headers });
+    res = await fetch(`${API_BASE_URL}/api${path}`, { ...options, headers, credentials: 'include' });
   } catch {
     throw new ApiError(0, 'سرور در دسترس نیست');
   }
@@ -75,17 +78,19 @@ export const auth = {
       body: JSON.stringify({ phone }),
     }),
   verifyOtp: (phone: string, code: string, name?: string) =>
-    request<{ ok: boolean; token: string; customer: Customer }>('/auth/otp/verify', {
+    request<{ ok: boolean; customer: Customer }>('/auth/otp/verify', {
       method: 'POST',
       body: JSON.stringify({ phone, code, name }),
     }),
   me: () => request<{ customer: Customer }>('/auth/me'),
   updateName: (name: string) => request('/auth/me', { method: 'PUT', body: JSON.stringify({ name }) }),
+  logout: () => request<{ ok: boolean }>('/auth/logout', { method: 'POST' }),
   adminLogin: (username: string, password: string) =>
-    request<{ ok: boolean; token: string; admin: { id: string; username: string; name: string; roleId: string; roleName: string } }>('/auth/admin-login', {
+    request<{ ok: boolean; admin: { id: string; username: string; name: string; roleId: string; roleName: string } }>('/auth/admin-login', {
       method: 'POST',
       body: JSON.stringify({ username, password }),
     }),
+  adminLogout: () => request<{ ok: boolean }>('/auth/admin-logout', { method: 'POST' }),
 };
 
 // ─── سفارش‌ها و پرداخت ─────────────────────────────────────────────────────
@@ -123,6 +128,25 @@ export const catalog = {
   createProduct: (payload: any) => request<any>('/products', { method: 'POST', body: JSON.stringify(payload) }),
   updateProduct: (id: string, payload: any) => request<any>(`/products/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
   deleteProduct: (id: string) => request<any>(`/products/${id}`, { method: 'DELETE' }),
+  deleteProductImage: (productId: string, imageId: string) => request<any>(`/uploads/products/${encodeURIComponent(productId)}/images/${encodeURIComponent(imageId)}`, { method: 'DELETE' }),
+  uploadProductImage: async (productId: string, file: File, alt?: string) => {
+    const fd = new FormData();
+    fd.append('image', file);
+    if (alt) fd.append('alt', alt);
+    const token = getToken();
+    const csrfMatch = document.cookie.match(/(?:^|; )tasis_csrf=([^;]+)/);
+    const headers: Record<string, string> = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+    if (csrfMatch) headers['X-CSRF-Token'] = decodeURIComponent(csrfMatch[1]);
+    const res = await fetch(`${API_BASE_URL}/api/uploads/products/${encodeURIComponent(productId)}/images`, {
+      method: 'POST',
+      body: fd,
+      credentials: 'include',
+      headers,
+    });
+    if (!res.ok) throw new Error(`upload failed: ${res.status}`);
+    return res.json();
+  },
   discounts: () => request<{ items: any[] }>('/discounts'),
   createDiscount: (payload: any) => request<any>('/discounts', { method: 'POST', body: JSON.stringify(payload) }),
   updateDiscount: (id: string, payload: any) => request<any>(`/discounts/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),

@@ -1,11 +1,13 @@
 import 'express-async-errors';
 import { randomUUID } from 'node:crypto';
+import path from 'node:path';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import { config } from './config.js';
-import { db, runWithRequestContext } from './db.js';
 import { isMockZarinpal, isKavenegarLive } from './config.js';
+import { db, runWithRequestContext } from './db.js';
+import { csrfProtection } from './middleware/csrf.js';
 import { seed } from './seed.js';
 
 const app = express();
@@ -42,7 +44,9 @@ app.use((req, res, next) => {
   }
   return next();
 });
-app.use(cors({ origin: config.corsOrigins }));
+app.use(cors({ origin: config.corsOrigins, credentials: true }));
+app.use('/api/uploads', uploadRoutes);
+app.use(csrfProtection);
 
 // ─── مسیرهای API ───────────────────────────────────────────────────────────
 import authRoutes from './routes/auth.js';
@@ -72,6 +76,7 @@ import taskRoutes from './routes/tasks.js';
 import surveyRoutes from './routes/surveys.js';
 import assetRoutes from './routes/assets.js';
 import loginHistoryRoutes from './routes/loginhistory.js';
+import uploadRoutes from './routes/uploads.js';
 import errorLogRoutes from './routes/errorlog.js';
 
 app.use('/api/auth', authRoutes);
@@ -101,6 +106,7 @@ app.use('/api/affiliates', affiliateRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/surveys', surveyRoutes);
 app.use('/api/assets', assetRoutes);
+app.use('/images', express.static(config.imageUploadDir, { maxAge: '31536000000', immutable: true }));
 app.use('/api/login-history', loginHistoryRoutes);
 app.use('/api/error-log', errorLogRoutes);
 
@@ -145,7 +151,8 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: 'internal', message: 'خطای داخلی سرور' });
 });
 
-async function start() {
+export { app };
+export async function startServer() {
   await db.initialize();
   await seed();
   app.listen(config.port, () => {
@@ -170,15 +177,18 @@ async function start() {
   cleanupTimer.unref();
 }
 
-await start().catch(async (error) => {
-  console.error(JSON.stringify({
-    event: 'startup_failed',
-    name: error.name || 'Error',
-    code: error.code || undefined,
-    message: typeof error.message === 'string'
-      ? error.message.replace(/postgres(?:ql)?:\/\/[^\s"'`]+/gi, '[database-url]').slice(0, 500)
-      : 'Application startup failed',
-  }));
-  await db.close();
-  process.exitCode = 1;
-});
+// Auto-start when run directly
+if (import.meta.url === `file://${process.argv[1]}`) {
+  startServer().catch(async (error) => {
+    console.error(JSON.stringify({
+      event: 'startup_failed',
+      name: error.name || 'Error',
+      code: error.code || undefined,
+      message: typeof error.message === 'string'
+        ? error.message.replace(/postgres(?:ql)?:\/\/[^\s"'`]+/gi, '[database-url]').slice(0, 500)
+        : 'Application startup failed',
+    }));
+    await db.close();
+    process.exitCode = 1;
+  });
+}

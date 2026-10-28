@@ -64,10 +64,10 @@ router.post('/mine', requireCustomer, async (req, res) => {
       (await db.exec('ROLLBACK'));
       return res.status(400).json({ error: 'product_not_in_order' });
     }
-    const priorQuantity = (await db.prepare('SELECT json FROM rmas').all())
-      .map(parse)
-      .filter((rma) => rma.orderId === orderId && rma.productId === productId && rma.status !== 'rejected')
-      .reduce((sum, rma) => sum + Number(rma.quantity || 0), 0);
+    const priorQuantityRow = (await db.prepare(
+      "SELECT COALESCE(SUM((json::jsonb ->> 'quantity')::int), 0) AS qty FROM rmas WHERE (json::jsonb ->> 'orderId') = ? AND (json::jsonb ->> 'productId') = ? AND (json::jsonb ->> 'status') <> 'rejected'"
+    ).get(orderId, productId));
+    const priorQuantity = Number(priorQuantityRow?.qty || 0);
     if (priorQuantity + quantity > Number(line.qty || 0)) {
       (await db.exec('ROLLBACK'));
       return res.status(409).json({ error: 'return_quantity_exceeded', message: 'تعداد درخواستی از مقدار قابل مرجوعی بیشتر است' });
@@ -133,10 +133,10 @@ router.post('/', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'product_not_in_order' });
     }
 
-    const priorQuantity = (await db.prepare('SELECT json FROM rmas').all())
-      .map(parse)
-      .filter((rma) => rma.orderId === orderId && rma.productId === productId && rma.status !== 'rejected')
-      .reduce((sum, rma) => sum + Number(rma.quantity || 0), 0);
+    const priorQuantityRow = (await db.prepare(
+      "SELECT COALESCE(SUM((json::jsonb ->> 'quantity')::int), 0) AS qty FROM rmas WHERE (json::jsonb ->> 'orderId') = ? AND (json::jsonb ->> 'productId') = ? AND (json::jsonb ->> 'status') <> 'rejected'"
+    ).get(orderId, productId));
+    const priorQuantity = Number(priorQuantityRow?.qty || 0);
     if (priorQuantity + quantity > Number(line.qty || 0)) {
       (await db.exec('ROLLBACK'));
       return res.status(409).json({ error: 'return_quantity_exceeded' });

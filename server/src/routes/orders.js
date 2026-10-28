@@ -307,10 +307,24 @@ router.get('/track', async (req, res) => {
 // ─── لیست کل سفارش‌ها (ادمین) ──────────────────────────────────────────────
 router.get('/', requireAdmin, async (req, res) => {
   const { status, mobile } = req.query;
-  let rows = (await db.prepare('SELECT json FROM orders ORDER BY created_at DESC').all()).map(parse);
-  if (status) rows = rows.filter((o) => o.status === status);
-  if (mobile) rows = rows.filter((o) => o.mobile === mobile);
-  res.json({ items: rows });
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 50));
+  const offset = (page - 1) * limit;
+
+  let where = [];
+  const params = [];
+  if (status) { where.push("json::jsonb ->> 'status' = ?"); params.push(status); }
+  if (mobile) { where.push("mobile = ?"); params.push(mobile); }
+  const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : '';
+
+  const countRow = (await db.prepare(`SELECT COUNT(*) AS c FROM orders ${whereClause}`).get(...params));
+  const total = Number(countRow?.c || 0);
+
+  const rows = (await db.prepare(
+    `SELECT json FROM orders ${whereClause} ORDER BY created_at DESC LIMIT ? OFFSET ?`
+  ).all(...params, limit, offset)).map(parse);
+
+  res.json({ items: rows, page, limit, total, totalPages: Math.ceil(total / limit) });
 });
 
 router.get('/:id', requireAdmin, async (req, res) => {

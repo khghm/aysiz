@@ -6,7 +6,20 @@ export function signToken(payload, audience, expiresIn = config.jwtExpiresIn) {
   return jwt.sign(payload, config.jwtSecret, { subject: audience, expiresIn });
 }
 
+function parseCookies(req) {
+  const header = req.headers.cookie || '';
+  const cookies = {};
+  header.split(';').forEach((part) => {
+    const [key, ...rest] = part.trim().split('=');
+    if (key) cookies[key] = decodeURIComponent(rest.join('='));
+  });
+  return cookies;
+}
+
 function readToken(req) {
+  const cookies = parseCookies(req);
+  if (cookies.tasis_customer) return cookies.tasis_customer;
+  if (cookies.tasis_admin) return cookies.tasis_admin;
   const header = req.headers.authorization || '';
   if (header.startsWith('Bearer ')) return header.slice(7);
   return null;
@@ -27,15 +40,21 @@ export function optionalAuth(audience) {
 }
 
 export function requireAuth(audience) {
-  return (req, res, next) => {
+  return async (req, res, next) => {
     const token = readToken(req);
     if (!token) return res.status(401).json({ error: 'unauthorized', message: 'ابتدا وارد حساب شوید' });
     try {
       req.user = jwt.verify(token, config.jwtSecret, { subject: audience });
-      next();
     } catch {
       return res.status(401).json({ error: 'unauthorized', message: 'نشست شما منقضی شده است' });
     }
+    if (audience === 'customer' && req.user?.id) {
+      const row = await db.prepare('SELECT is_blocked FROM customers WHERE id = ?').get(req.user.id);
+      if (row?.is_blocked) {
+        return res.status(403).json({ error: 'blocked', message: 'حساب شما مسدود شده است' });
+      }
+    }
+    next();
   };
 }
 
@@ -45,6 +64,7 @@ const adminSections = [
   ['/api/orders/pos', 'pos'],
   ['/api/orders', 'orders'],
   ['/api/products', 'products'],
+  ['/api/uploads', 'products'],
   ['/api/discounts', 'discounts'],
   ['/api/reviews', 'reviews'],
   ['/api/settings', 'settings'],
