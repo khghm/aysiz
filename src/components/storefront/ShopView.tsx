@@ -2,12 +2,11 @@ import Stars from '../shared/Stars';
 import ProductCard from '../shared/ProductCard';
 import { useState, useMemo } from 'react';
 import { useShop } from '../../context/ShopContext';
-import { categories, brands } from '../../data/products';
 import { formatPrice, finalPrice, faNum } from '../../utils/format';
 import { IconFilter, IconX, IconGrid, IconList, IconPackage } from '../Icons';
 
 export default function ShopView() {
-  const { products } = useShop();
+  const { products, categories, brands } = useShop();
   const [catFilter, setCatFilter] = useState('');
   const [brandFilter, setBrandFilter] = useState('');
   const [priceMin, setPriceMin] = useState('');

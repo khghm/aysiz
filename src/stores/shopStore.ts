@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import type { Product, Review, Article } from '../data/products';
-import { seedProducts, seedReviews, seedArticles } from '../data/products';
+import type { Product, Review, Article, Category } from '../data/products';
+import { categories as seedCategories, seedProducts, seedReviews, seedArticles } from '../data/products';
 import { seedSettings, seedDiscountCodes } from '../data/adminData';
 import { formatPrice } from '../utils/format';
 import * as api from '../services/api';
@@ -45,6 +45,7 @@ interface ShopState {
   selectedPage: string;
   selectedPost: string;
   products: Product[];
+  categories: Category[];
   reviews: Review[];
   articles: Article[];
   cart: CartItem[];
@@ -62,6 +63,7 @@ interface ShopState {
   setSelectedPage: (page: string) => void;
   setSelectedPost: (post: string) => void;
   setProducts: (products: Product[]) => void;
+  setCategories: (categories: Category[]) => void;
   setReviews: (reviews: Review[]) => void;
   setArticles: (articles: Article[]) => void;
   addToCart: (item: CartItem) => void;
@@ -106,6 +108,7 @@ export const useShopStore = create<ShopState>((set, get) => ({
   selectedPage: '',
   selectedPost: '',
   products: load('tasis-products', seedProducts),
+  categories: load('tasis-categories', seedCategories),
   reviews: load('tasis-reviews', seedReviews),
   articles: load('tasis-articles', seedArticles),
   cart: load('tasis-cart', []),
@@ -125,6 +128,10 @@ export const useShopStore = create<ShopState>((set, get) => ({
   setProducts: (products) => {
     set({ products });
     save('tasis-products', products);
+  },
+  setCategories: (categories) => {
+    set({ categories });
+    save('tasis-categories', categories);
   },
   setReviews: (reviews) => {
     set({ reviews });

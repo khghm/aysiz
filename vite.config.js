@@ -13,6 +13,7 @@ export default defineConfig({
     proxy: {
       // API بک‌اند تای سیز (Express روی پورت 4000)
       "/api": { target: API_TARGET, changeOrigin: true },
+      "/images": { target: API_TARGET, changeOrigin: true },
       // صفحه شبیه‌ساز درگاه زرین‌پال در حالت تستی (سرو شده توسط بک‌اند)
       "/mock-gateway": { target: API_TARGET, changeOrigin: true },
     },

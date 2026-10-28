@@ -1,11 +1,10 @@
 import ProductCard from '../shared/ProductCard';
 import { useState } from 'react';
 import { useShop } from '../../context/ShopContext';
-import { categories, brands } from '../../data/products';
 import { IconTruck, IconShield, IconChevronLeft, IconPackage, IconReturn, IconPhone, IconZap } from '../Icons';
 
 export default function HomeView() {
-  const { products, setView, setSelectedProduct, setSelectedPost, articles, settings } = useShop();
+  const { products, categories, brands, setView, setSelectedProduct, setSelectedPost, articles, settings } = useShop();
   const active = products.filter(p => p.effective);
   const bestSellers = [...active].sort((a, b) => b.sales - a.sales).slice(0, 8);
   const newest = [...active].filter(p => p.isNew).slice(0, 8);
@@ -22,7 +21,7 @@ export default function HomeView() {
         </div>
         <div className="max-w-7xl mx-auto relative z-10">
           <h1 className="font-display text-3xl sm:text-5xl mb-4">فروشگاه آنلاین <span className="text-accent-500">تای سیز</span></h1>
-          <p className="text-brand-200 text-sm sm:text-base max-w-lg mb-6">بهترین پوشاک با کیفیت تولیدی و برندهای معتبر. لباس زیر، تی‌شرت، پیراهن، دمپایی، صندل و جوراب برای تمام سنین.</p>
+          <p className="text-brand-200 text-sm sm:text-base max-w-lg mb-6">بهترین پوشاک با کیفیت تولیدی و برندهای معتبر.</p>
           <button onClick={() => setView('shop')} className="bg-accent-500 text-brand-950 font-extrabold px-6 py-3 rounded-xl hover:bg-accent-400 transition-colors shadow-lg">مشاهده محصولات</button>
         </div>
       </section>

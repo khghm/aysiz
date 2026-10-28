@@ -52,5 +52,6 @@ npm run migrate:sqlite -- --apply
 
 - `GET/POST/PUT/DELETE /api/tickets`, `/api/rmas`, `/api/carriers`, `/api/vendors`, `/api/campaigns`, `/api/automations`, `/api/invoices`, `/api/expenses`, `/api/bank-tx`, `/api/abandoned`, `/api/search-terms`, `/api/tasks`, `/api/surveys`, `/api/assets`, `/api/error-log`
 - `GET/POST/PUT/DELETE /api/content/pages`, `/api/content/banners`, `/api/content/posts`
+- `POST/DELETE /api/uploads/content/:type/:id/images`, for content image variants served from `/images/content/...`
 - `GET/POST/PUT/DELETE /api/admin/roles`, `GET/POST /api/admin/audit`, `GET /api/admin/integrations`, `PUT /api/admin/integrations/:id`, `GET/PUT /api/admin/loyalty`, `GET/PUT /api/admin/aff-config`
 - `GET/POST/PUT/DELETE /api/affiliates/affiliates`, `/api/affiliates/payouts`, `GET/POST/DELETE /api/login-history`

@@ -1,19 +1,18 @@
 import React, { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { categories, brands } from '../data/products';
+import { brands } from '../data/products';
 import * as api from '../services/api';
 import { useShopStore, shopMoney } from '../stores/shopStore';
 
-export const useShop = () => ({
-  ...useShopStore(),
-  categories,
-  brands,
-  money: shopMoney,
-});
+export const useShop = () => {
+  const state = useShopStore();
+  return { ...state, categories: state.categories, brands, money: shopMoney };
+};
 
 export function ShopProvider({ children }: { children: React.ReactNode }) {
   const addToast = useShopStore((state) => state.addToast);
   const setCustomer = useShopStore((state) => state.setCustomer);
+  const setCategories = useShopStore((state) => state.setCategories);
   const productsQuery = useQuery({
     queryKey: ['catalog', 'products'],
     queryFn: async () => {
@@ -26,6 +25,11 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
   const settingsQuery = useQuery({
     queryKey: ['catalog', 'settings'],
     queryFn: api.catalog.settings,
+    staleTime: 60_000,
+  });
+  const metaQuery = useQuery({
+    queryKey: ['catalog', 'meta'],
+    queryFn: api.catalog.meta,
     staleTime: 60_000,
   });
   const articlesQuery = useQuery({
@@ -59,6 +63,12 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
   }, [settingsQuery.data]);
 
   useEffect(() => {
+    if (Array.isArray(metaQuery.data?.categories) && metaQuery.data.categories.length) {
+      setCategories(metaQuery.data.categories);
+    }
+  }, [metaQuery.data, setCategories]);
+
+  useEffect(() => {
     if (articlesQuery.data) useShopStore.getState().setArticles(articlesQuery.data);
   }, [articlesQuery.data]);
 
@@ -73,6 +83,10 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (settingsQuery.error) addToast('danger', `بارگذاری تنظیمات فروشگاه ناموفق بود: ${settingsQuery.error.message}`);
   }, [settingsQuery.error, addToast]);
+
+  useEffect(() => {
+    if (metaQuery.error) addToast('danger', `بارگذاری دسته‌بندی‌ها ناموفق بود: ${metaQuery.error.message}`);
+  }, [metaQuery.error, addToast]);
 
   useEffect(() => {
     if (articlesQuery.error) addToast('danger', `بارگذاری وبلاگ ناموفق بود: ${articlesQuery.error.message}`);

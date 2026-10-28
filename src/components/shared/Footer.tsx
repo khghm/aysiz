@@ -8,7 +8,14 @@ export default function Footer() {
     <footer className="bg-brand-950 text-white mt-12">
       <div className="max-w-7xl mx-auto px-4 py-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
         <div>
-          <div className="flex items-center gap-2 mb-3"><div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center"><span className="font-display text-sm">ت</span></div><span className="font-display text-lg">{settings.storeName || 'تای سیز'}</span></div>
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center overflow-hidden">
+              {settings.logo
+                ? <img src={settings.logo} className="w-full h-full object-contain" alt={settings.storeName || 'لوگوی فروشگاه'} />
+                : <span className="font-display text-sm">ت</span>}
+            </div>
+            <span className="font-display text-lg">{settings.storeName || 'تای سیز'}</span>
+          </div>
           <p className="text-[12px] text-brand-300 leading-6">فروشگاه آنلاین پوشاک تای سیز با سال‌ها تجربه در تولید و فروش انواع پوشاک با کیفیت.</p>
         </div>
         <div>

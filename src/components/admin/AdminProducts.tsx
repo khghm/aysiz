@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { queryClient } from '../../services/queryClient';
 import { useShop } from '../../context/ShopContext';
 import { useAdmin } from '../../context/AdminContext';
-import { categories } from '../../data/products';
+import type { Category } from '../../data/products';
 import { formatPrice, finalPrice, faNum } from '../../utils/format';
 import * as api from '../../services/api';
 import { IconCheck, IconX, IconPlus, IconEdit, IconTrash, IconPackage, IconUpload, IconAlert } from '../Icons';
@@ -25,7 +25,7 @@ export default function AdminProducts() {
       total: items.length,
     }));
   }, [queryClient]);
-  const { setView, setSelectedProduct, setProducts: setShopProducts, addToast } = useShop();
+  const { categories, setCategories, setView, setSelectedProduct, setProducts: setShopProducts, addToast } = useShop();
   useEffect(() => {
     if (productsQuery.error) addToast('danger', `بارگذاری محصولات ناموفق بود: ${productsQuery.error.message}`);
   }, [addToast, productsQuery.error]);
@@ -37,7 +37,47 @@ export default function AdminProducts() {
   const [formError, setFormError] = useState<string | null>(null);
   const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
   const [showLowStockPanel, setShowLowStockPanel] = useState(false);
+  const [showCategoryManager, setShowCategoryManager] = useState(false);
+  const [categoryDraft, setCategoryDraft] = useState<Category[]>([]);
+  const [savingCategories, setSavingCategories] = useState(false);
+  const [categoryError, setCategoryError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const openCategoryManager = () => {
+    setCategoryDraft(categories.map((category) => ({
+      ...category,
+      subs: category.subs.map((sub) => ({ ...sub })),
+    })));
+    setCategoryError('');
+    setShowCategoryManager(true);
+  };
+
+  const saveCategories = async () => {
+    const names = categoryDraft.map((category) => category.name.trim().toLocaleLowerCase());
+    if (categoryDraft.some((category) => !category.name.trim()) || new Set(names).size !== names.length) {
+      setCategoryError('نام دسته‌ها باید وارد شود و تکراری نباشد');
+      return;
+    }
+    if (categoryDraft.some((category) => category.subs.some((sub) => !sub.name.trim()))) {
+      setCategoryError('نام همه زیردسته‌ها را وارد کنید یا زیردسته خالی را حذف کنید');
+      return;
+    }
+
+    setSavingCategories(true);
+    setCategoryError('');
+    try {
+      const currentMeta = await api.catalog.meta();
+      const saved = await api.catalog.updateMeta({ categories: categoryDraft, brands: currentMeta.brands });
+      setCategories(saved.categories);
+      await queryClient.invalidateQueries({ queryKey: ['catalog', 'meta'] });
+      setShowCategoryManager(false);
+      addToast('success', 'دسته‌بندی‌ها در سایت به‌روزرسانی شد');
+    } catch (error) {
+      setCategoryError(error instanceof Error ? error.message : 'ذخیره دسته‌بندی‌ها ناموفق بود');
+    } finally {
+      setSavingCategories(false);
+    }
+  };
 
   const getThreshold = (p: any) => p.lowStockThreshold || 5;
   const getStockStatus = (p: any): 'out' | 'critical' | 'low' | 'ok' => {
@@ -213,7 +253,8 @@ export default function AdminProducts() {
           <option value="out">ناموجود</option>
           <option value="ok">موجودی کافی</option>
         </select>
-        <button onClick={() => { setEditing({ name: '', category: 'underwear', subcategory: 'briefs', brand: 'تای سیز', price: 0, discount: 0, rating: 0, image: '', book: [], colors: [], sizes: [], stock: 0, sales: 0, isNew: true, effective: true, description: '', features: [], specs: {}, sku: '', commission: 8, vendor: '', lowStockThreshold: 5 }); setShowForm(true); }} className="bg-brand-900 text-white px-4 py-2 rounded-xl text-[12px] font-bold flex items-center gap-1"><IconPlus className="w-4 h-4" />افزودن محصول</button>
+        <button onClick={openCategoryManager} className="border border-brand-300 text-brand-800 px-3 py-2 rounded-xl text-[12px] font-bold">مدیریت دسته‌بندی‌ها</button>
+        <button onClick={() => { setEditing({ name: '', category: categories[0]?.id || '', subcategory: categories[0]?.subs[0]?.id || '', brand: 'تای سیز', price: 0, discount: 0, rating: 0, image: '', book: [], colors: [], sizes: [], stock: 0, sales: 0, isNew: true, effective: true, description: '', features: [], specs: {}, sku: '', commission: 8, vendor: '', lowStockThreshold: 5 }); setShowForm(true); }} className="bg-brand-900 text-white px-4 py-2 rounded-xl text-[12px] font-bold flex items-center gap-1"><IconPlus className="w-4 h-4" />افزودن محصول</button>
       </div>
 
       {/* Products Table */}
@@ -282,6 +323,69 @@ export default function AdminProducts() {
           </table>
         </div>
       </div>
+      {showCategoryManager && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => { if (!savingCategories) setShowCategoryManager(false); }}>
+          <div className={`w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl ${darkMode ? 'bg-[#151b26]' : 'bg-white'} p-6`} onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-brand-900'}`}>مدیریت دسته‌بندی محصولات</h3>
+              <button onClick={() => setShowCategoryManager(false)} disabled={savingCategories} className="text-sm text-cream-500 disabled:opacity-50">بستن</button>
+            </div>
+            <p className="text-[11px] text-cream-500 mb-4">تغییر نام دسته‌بندی در فروشگاه اعمال می‌شود. دسته‌هایی که محصول دارند تا زمان تغییر دستهٔ محصولات قابل حذف نیستند.</p>
+            <div className="space-y-3">
+              {categoryDraft.map((category, categoryIndex) => {
+                const hasProducts = products.some((product) => product.category === category.id);
+                return (
+                  <div key={category.id} className={`rounded-xl border ${darkMode ? 'border-white/10 bg-[#1a212c]' : 'border-cream-200 bg-cream-50'} p-3`}>
+                    <div className="flex items-center gap-2">
+                      <input aria-label="نام دسته‌بندی" value={category.name} onChange={(event) => setCategoryDraft(categoryDraft.map((item, index) => index === categoryIndex ? { ...item, name: event.target.value } : item))} className="flex-1 rounded-lg border border-cream-300 bg-white px-3 py-2 text-[12px] outline-none" />
+                      <button
+                        onClick={() => setCategoryDraft(categoryDraft.filter((_item, index) => index !== categoryIndex))}
+                        disabled={hasProducts || categoryDraft.length === 1}
+                        title={hasProducts ? 'ابتدا محصولات این دسته را به دستهٔ دیگری منتقل کنید' : 'حذف دسته'}
+                        className="p-2 rounded-lg text-coral-600 hover:bg-coral-50 disabled:opacity-40"
+                      ><IconTrash className="w-4 h-4" /></button>
+                    </div>
+                    {hasProducts && <p className="mt-1 text-[10px] text-amber-700">برای حذف، ابتدا دستهٔ محصولات مرتبط را تغییر دهید.</p>}
+                    <div className="mt-3 space-y-2">
+                      {category.subs.map((sub, subIndex) => {
+                        const subHasProducts = products.some((product) => product.subcategory === sub.id);
+                        return (
+                          <div key={sub.id} className="flex items-center gap-2 ps-4">
+                            <input aria-label="نام زیردسته" value={sub.name} onChange={(event) => setCategoryDraft(categoryDraft.map((item, index) => index === categoryIndex
+                              ? { ...item, subs: item.subs.map((current, currentIndex) => currentIndex === subIndex ? { ...current, name: event.target.value } : current) }
+                              : item))} className="flex-1 rounded-lg border border-cream-300 bg-white px-3 py-1.5 text-[11px] outline-none" />
+                            <button
+                              onClick={() => setCategoryDraft(categoryDraft.map((item, index) => index === categoryIndex
+                                ? { ...item, subs: item.subs.filter((_current, currentIndex) => currentIndex !== subIndex) }
+                                : item))}
+                              disabled={subHasProducts}
+                              title={subHasProducts ? 'ابتدا زیردستهٔ محصولات مرتبط را تغییر دهید' : 'حذف زیردسته'}
+                              className="p-1.5 rounded-lg text-coral-600 hover:bg-coral-50 disabled:opacity-40"
+                            ><IconTrash className="w-3.5 h-3.5" /></button>
+                          </div>
+                        );
+                      })}
+                      <button onClick={() => setCategoryDraft(categoryDraft.map((item, index) => index === categoryIndex
+                        ? { ...item, subs: [...item.subs, { id: `sub-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, name: '' }] }
+                        : item))} className="ms-4 text-[11px] font-bold text-brand-700">+ افزودن زیردسته</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <button onClick={() => setCategoryDraft([...categoryDraft, {
+              id: `category-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+              name: '',
+              icon: 'package',
+              subs: [],
+            }])} className="mt-3 w-full rounded-xl border border-dashed border-brand-300 py-2 text-[12px] font-bold text-brand-800">+ افزودن دسته‌بندی</button>
+            {categoryError && <p role="alert" className="mt-3 text-[11px] text-coral-700">{categoryError}</p>}
+            <button onClick={saveCategories} disabled={savingCategories} className="w-full mt-4 bg-brand-900 text-white py-2.5 rounded-xl font-bold text-[12px] disabled:opacity-60">
+              {savingCategories ? 'در حال ذخیره...' : 'ذخیره دسته‌بندی‌ها'}
+            </button>
+          </div>
+        </div>
+      )}
       {showForm && editing && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setShowForm(false)}>
           <div className={`w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl ${darkMode ? 'bg-[#151b26]' : 'bg-white'} p-6 animate-rise`} onClick={e => e.stopPropagation()}>
@@ -292,9 +396,16 @@ export default function AdminProducts() {
             <div className="space-y-3">
               <div><label className="text-[11px] font-bold text-cream-500 mb-1 block">نام محصول</label><input value={editing.name} onChange={e => setEditing({ ...editing, name: e.target.value })} className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" /></div>
               <div className="grid grid-cols-2 gap-3">
-                <div><label className="text-[11px] font-bold text-cream-500 mb-1 block">دسته‌بندی</label><select value={editing.category} onChange={e => setEditing({ ...editing, category: e.target.value })} className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none">{categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+                <div><label className="text-[11px] font-bold text-cream-500 mb-1 block">دسته‌بندی</label><select value={editing.category} onChange={e => {
+                  const category = categories.find((item) => item.id === e.target.value);
+                  setEditing({ ...editing, category: e.target.value, subcategory: category?.subs[0]?.id || '' });
+                }} className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none">{categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
                 <div><label className="text-[11px] font-bold text-cream-500 mb-1 block">برند</label><input value={editing.brand} onChange={e => setEditing({ ...editing, brand: e.target.value })} className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" /></div>
               </div>
+              <div><label className="text-[11px] font-bold text-cream-500 mb-1 block">زیردسته</label><select value={editing.subcategory || ''} onChange={e => setEditing({ ...editing, subcategory: e.target.value })} className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none">
+                <option value="">بدون زیردسته</option>
+                {categories.find((category) => category.id === editing.category)?.subs.map((sub) => <option key={sub.id} value={sub.id}>{sub.name}</option>)}
+              </select></div>
               <div className="grid grid-cols-3 gap-3">
                 <div><label className="text-[11px] font-bold text-cream-500 mb-1 block">قیمت (تومان)</label><input type="number" value={editing.price} onChange={e => setEditing({ ...editing, price: +e.target.value })} className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" /></div>
                 <div><label className="text-[11px] font-bold text-cream-500 mb-1 block">تخفیف (٪)</label><input type="number" value={editing.discount} onChange={e => setEditing({ ...editing, discount: +e.target.value })} className="w-full rounded-xl border border-cream-300 px-3 py-2 text-[12px] outline-none" /></div>

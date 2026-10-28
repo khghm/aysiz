@@ -1,13 +1,13 @@
 import { useState, useRef } from 'react';
 import { useShop } from '../../context/ShopContext';
 import { useAdmin } from '../../context/AdminContext';
-import { Product, categories } from '../../data/products';
+import { Product } from '../../data/products';
 import { formatPrice, finalPrice, faNum } from '../../utils/format';
 import * as api from '../../services/api';
 import { IconSearch, IconCheck, IconPlus, IconMinus } from '../Icons';
 
 export default function AdminPOS() {
-  const { products, setProducts, settings, addToast } = useShop();
+  const { products, categories, setProducts, settings, addToast } = useShop();
   const { darkMode, log, setOrders } = useAdmin();
   const [cart, setCart] = useState<any[]>([]);
   const [search, setSearch] = useState('');

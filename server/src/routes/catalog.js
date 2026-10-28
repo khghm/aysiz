@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { db, getSetting } from '../db.js';
+import { db, getSetting, setSetting } from '../db.js';
 import { uid, nowIso } from '../util.js';
 import { requireAdmin } from '../middleware/auth.js';
 
@@ -11,6 +11,44 @@ const parse = (row) => (row ? JSON.parse(row.json) : null);
 router.get('/meta', async (_req, res) => {
   const meta = await getSetting('meta') || { categories: [], brands: [] };
   res.json(meta);
+});
+
+router.put('/meta', requireAdmin, async (req, res) => {
+  const { categories, brands } = req.body || {};
+  if (!Array.isArray(categories) || categories.length === 0 || !Array.isArray(brands)) {
+    return res.status(400).json({ error: 'invalid_meta', message: 'دسته‌بندی‌ها و برندها باید به‌صورت فهرست ارسال شوند' });
+  }
+  const categoryIds = new Set();
+  const subcategoryIds = new Set();
+  for (const category of categories) {
+    if (!category || typeof category.id !== 'string' || !category.id.trim()
+      || typeof category.name !== 'string' || !category.name.trim()
+      || typeof category.icon !== 'string' || !Array.isArray(category.subs)) {
+      return res.status(400).json({ error: 'invalid_category', message: 'اطلاعات یکی از دسته‌بندی‌ها معتبر نیست' });
+    }
+    if (categoryIds.has(category.id)) {
+      return res.status(400).json({ error: 'duplicate_category', message: 'شناسه دسته‌بندی تکراری است' });
+    }
+    categoryIds.add(category.id);
+    for (const sub of category.subs) {
+      if (!sub || typeof sub.id !== 'string' || !sub.id.trim()
+        || typeof sub.name !== 'string' || !sub.name.trim()) {
+        return res.status(400).json({ error: 'invalid_subcategory', message: 'اطلاعات یکی از زیردسته‌ها معتبر نیست' });
+      }
+      if (subcategoryIds.has(sub.id)) {
+        return res.status(400).json({ error: 'duplicate_subcategory', message: 'شناسه زیردسته تکراری است' });
+      }
+      subcategoryIds.add(sub.id);
+    }
+  }
+  if (brands.some((brand) => typeof brand !== 'string' || !brand.trim())) {
+    return res.status(400).json({ error: 'invalid_brands', message: 'فهرست برندها معتبر نیست' });
+  }
+
+  const current = await getSetting('meta') || {};
+  const updated = { ...current, categories, brands };
+  await setSetting('meta', updated);
+  res.json(updated);
 });
 
 // ─── لیست محصولات (عمومی) ──────────────────────────────────────────────────

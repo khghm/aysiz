@@ -62,6 +62,7 @@ export const requireCustomer = requireAuth('customer');
 
 const adminSections = [
   ['/api/orders/pos', 'pos'],
+  ['/api/meta', 'products'],
   ['/api/orders', 'orders'],
   ['/api/products', 'products'],
   ['/api/uploads', 'products'],
@@ -95,6 +96,7 @@ function sectionForRequest(req) {
   if (pathname === '/api/admin/me') return 'home';
   if (pathname === '/api/admin/loyalty') return 'growth';
   if (pathname === '/api/admin/aff-config') return 'affiliates';
+  if (pathname.startsWith('/api/uploads/content/')) return 'content';
   if (pathname.startsWith('/api/admin/')) return 'system';
   return adminSections.find(([prefix]) => pathname === prefix || pathname.startsWith(`${prefix}/`))?.[1] || null;
 }

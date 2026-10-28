@@ -32,7 +32,9 @@ export default function Header() {
         <button className="lg:hidden" onClick={() => setMobileMenu(!mobileMenu)}><IconMenu className="w-6 h-6 text-brand-900" /></button>
         <div className="cursor-pointer flex items-center gap-2" onClick={() => setView('home')}>
           <div className="w-10 h-10 rounded-xl bg-brand-900 flex items-center justify-center">
-            <span className="text-white font-display text-lg">ت</span>
+            {settings.logo
+              ? <img src={settings.logo} className="w-full h-full rounded-xl object-contain bg-white" alt={settings.storeName || 'لوگوی فروشگاه'} />
+              : <span className="text-white font-display text-lg">ت</span>}
           </div>
           <span className="font-display text-xl text-brand-900 hidden sm:block">{settings.storeName || 'تای سیز'}</span>
         </div>

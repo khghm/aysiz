@@ -78,14 +78,30 @@ router.delete('/banners/:id', requireAdmin, async (req, res) => {
 
 // ─── پست‌های وبلاگ ──────────────────────────────────────────────────────────
 router.get('/posts', requireAdmin, async (_req, res) => {
-  const items = (await db.prepare('SELECT json FROM posts ORDER BY updated_at DESC').all()).map(parse);
+  const [articleRows, postRows] = await Promise.all([
+    db.prepare('SELECT json FROM articles ORDER BY updated_at DESC').all(),
+    db.prepare('SELECT json FROM posts ORDER BY updated_at DESC').all(),
+  ]);
+  const articles = articleRows.map(parse).map((article) => ({
+    ...article,
+    category: article.category || article.cat || '',
+    published: article.published ?? true,
+  }));
+  const items = [...postRows.map(parse), ...articles];
   res.json({ items });
 });
 
 router.get('/posts/:id', requireAdmin, async (req, res) => {
   const row = (await db.prepare('SELECT json FROM posts WHERE id = ?').get(req.params.id));
-  if (!row) return res.status(404).json({ error: 'not_found' });
-  res.json(parse(row));
+  if (row) return res.json(parse(row));
+  const articleRow = (await db.prepare('SELECT json FROM articles WHERE id = ?').get(req.params.id));
+  if (!articleRow) return res.status(404).json({ error: 'not_found' });
+  const article = parse(articleRow);
+  res.json({
+    ...article,
+    category: article.category || article.cat || '',
+    published: article.published ?? true,
+  });
 });
 
 router.post('/posts', requireAdmin, async (req, res) => {
@@ -99,14 +115,28 @@ router.post('/posts', requireAdmin, async (req, res) => {
 
 router.put('/posts/:id', requireAdmin, async (req, res) => {
   const row = (await db.prepare('SELECT json FROM posts WHERE id = ?').get(req.params.id));
-  if (!row) return res.status(404).json({ error: 'not_found' });
-  const updated = { ...parse(row), ...req.body, id: req.params.id };
-  (await db.prepare('UPDATE posts SET json = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(updated), nowIso(), req.params.id));
-  res.json(updated);
+  if (row) {
+    const updated = { ...parse(row), ...req.body, id: req.params.id };
+    (await db.prepare('UPDATE posts SET json = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(updated), nowIso(), req.params.id));
+    return res.json(updated);
+  }
+  const articleRow = (await db.prepare('SELECT json FROM articles WHERE id = ?').get(req.params.id));
+  if (!articleRow) return res.status(404).json({ error: 'not_found' });
+  const updated = { ...parse(articleRow), ...req.body, id: req.params.id };
+  if (req.body?.category !== undefined) {
+    updated.cat = req.body.category;
+    delete updated.category;
+  }
+  (await db.prepare('UPDATE articles SET json = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(updated), nowIso(), req.params.id));
+  res.json({ ...updated, category: updated.cat || '' });
 });
 
 router.delete('/posts/:id', requireAdmin, async (req, res) => {
   const info = (await db.prepare('DELETE FROM posts WHERE id = ?').run(req.params.id));
+  if (!info.changes) {
+    const articleInfo = await db.prepare('DELETE FROM articles WHERE id = ?').run(req.params.id);
+    if (articleInfo.changes) return res.json({ ok: true });
+  }
   if (!info.changes) return res.status(404).json({ error: 'not_found' });
   res.json({ ok: true });
 });

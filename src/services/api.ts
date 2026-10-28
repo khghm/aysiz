@@ -152,6 +152,8 @@ export const catalog = {
   updateDiscount: (id: string, payload: any) => request<any>(`/discounts/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
   deleteDiscount: (id: string) => request<any>(`/discounts/${id}`, { method: 'DELETE' }),
   meta: () => request<{ categories: any[]; brands: string[] }>('/meta'),
+  updateMeta: (payload: { categories: any[]; brands: string[] }) =>
+    request<{ categories: any[]; brands: string[] }>('/meta', { method: 'PUT', body: JSON.stringify(payload) }),
   settings: () => request<any>('/settings'),
   updateSettings: (payload: any) => request<any>('/settings', { method: 'PUT', body: JSON.stringify(payload) }),
   validateDiscount: (code: string, subtotal: number) =>
@@ -226,6 +228,25 @@ export const content = {
   pages: collection('/content/pages'),
   banners: collection('/content/banners'),
   posts: collection('/content/posts'),
+  uploadContentImage: async (type: 'pages' | 'banners' | 'posts', id: string, file: File, alt?: string) => {
+    const formData = new FormData();
+    formData.append('image', file);
+    if (alt) formData.append('alt', alt);
+    const response = await fetch(
+      `${API_BASE_URL}/api/uploads/content/${type}/${encodeURIComponent(id)}/images`,
+      { method: 'POST', body: formData, credentials: 'include' },
+    );
+    const payload = await response.json().catch(() => null) as
+      | { image?: any; message?: string; error?: string }
+      | null;
+    if (!response.ok) {
+      throw new ApiError(response.status, payload?.message || payload?.error || 'آپلود تصویر ناموفق بود');
+    }
+    if (!payload?.image?.url) throw new ApiError(502, 'پاسخ آپلود تصویر معتبر نیست');
+    return payload.image;
+  },
+  deleteContentImage: (type: 'pages' | 'banners' | 'posts', id: string, imageId: string) =>
+    request<any>(`/uploads/content/${type}/${encodeURIComponent(id)}/images/${encodeURIComponent(imageId)}`, { method: 'DELETE' }),
 };
 
 export const admin = {

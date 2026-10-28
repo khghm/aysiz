@@ -31,7 +31,18 @@ Make content manager fully functional: image upload for pages/banners/posts, wor
 - Content images currently base64; migration needed if switching to files.
 - CSRF exemption for uploads must include new path.
 
-## Validation
-- Create/edit page, banner, post with image.
-- Verify image URL loads via `/images/...`.
-- No 400/403/500 errors.
+## Additional Plan: Brand Management & Icon Picker
+
+### Goal
+Extend category manager in AdminProducts to manage brands and category icons, with shared source via /api/meta.
+
+### Tasks
+1. Frontend: Add brand list editor in category manager modal (add/remove/rename).
+2. Frontend: Add icon picker for each category (select from a fixed icon set).
+3. Backend: No changes needed (meta already supports brands).
+4. State: Update `setCategories` and brands via `updateMeta`.
+5. Validation: prevent duplicate brands, empty names.
+
+### Open Questions
+- Icon set: use existing Icons component names or emoji? Recommended: predefined list of icon keys mapped to Icons.
+

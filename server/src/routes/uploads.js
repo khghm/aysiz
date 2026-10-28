@@ -26,9 +26,74 @@ const VARIANTS = [
   { name: 'large', width: 1600 },
 ];
 
+const CONTENT_TYPES = new Set(['pages', 'banners', 'posts']);
+
 async function ensureDir(dir) {
   await fs.mkdir(dir, { recursive: true });
 }
+
+function uploadContentImage(req, res, next) {
+  upload.single('image')(req, res, (error) => {
+    if (!error) return next();
+    if (error.message === 'invalid_mime') {
+      return res.status(415).json({ error: 'invalid_image_type', message: 'فرمت تصویر پشتیبانی نمی‌شود' });
+    }
+    if (error instanceof multer.MulterError) {
+      const status = error.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+      return res.status(status).json({ error: 'invalid_image_upload', message: 'آپلود تصویر معتبر نیست' });
+    }
+    return next(error);
+  });
+}
+
+router.post('/content/:type/:id/images', requireAdmin, uploadContentImage, async (req, res) => {
+  const { type, id } = req.params;
+  if (!CONTENT_TYPES.has(type) || !/^[a-zA-Z0-9_-]+$/.test(id)) {
+    return res.status(400).json({ error: 'invalid_content_id', message: 'شناسه محتوا معتبر نیست' });
+  }
+  if (!req.file) return res.status(400).json({ error: 'no_file', message: 'فایل تصویر الزامی است' });
+
+  const imageId = randomUUID();
+  const baseDir = path.join(uploadDir, 'content', type, id);
+  await ensureDir(baseDir);
+  const urls = {};
+  for (const variant of VARIANTS) {
+    const filename = `${imageId}-${variant.name}.webp`;
+    await sharp(req.file.buffer)
+      .resize({ width: variant.width, withoutEnlargement: true })
+      .webp({ quality: 82 })
+      .toFile(path.join(baseDir, filename));
+    urls[variant.name] = `/images/content/${type}/${id}/${filename}`;
+  }
+
+  const image = {
+    id: imageId,
+    url: urls.large,
+    thumb: urls.thumb,
+    medium: urls.medium,
+    alt: req.body?.alt || '',
+    createdAt: nowIso(),
+  };
+  res.status(201).json({ image, urls });
+});
+
+router.delete('/content/:type/:id/images/:imageId', requireAdmin, async (req, res) => {
+  const { type, id, imageId } = req.params;
+  if (!CONTENT_TYPES.has(type) || !/^[a-zA-Z0-9_-]+$/.test(id)
+    || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(imageId)) {
+    return res.status(400).json({ error: 'invalid_content_image', message: 'شناسه تصویر معتبر نیست' });
+  }
+
+  const baseDir = path.join(uploadDir, 'content', type, id);
+  for (const variant of VARIANTS) {
+    try {
+      await fs.unlink(path.join(baseDir, `${imageId}-${variant.name}.webp`));
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
+  }
+  res.json({ ok: true });
+});
 
 router.post('/products/:id/images', requireAdmin, upload.single('image'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'no_file', message: 'فایل تصویر الزامی است' });
